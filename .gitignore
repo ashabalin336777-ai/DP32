@@ -19,6 +19,18 @@ dist/
 build/
 *.log
 .cache/
+.diskcache/
+
+# Runtime artifacts
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/raw/**/*.html
+reports/*.pdf
+reports/*.html
+logs/*
+!logs/.gitkeep
+backups/
 
 # IDE & OS
 .idea/

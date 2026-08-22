@@ -1,0 +1,24 @@
+{
+  "targets": [
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "url": "https://www.chipdip.ru/catalog/mikrokontrollery-1738"
+    },
+    {
+      "competitor": "Платан",
+      "slug": "platan",
+      "url": "https://www.platan.ru/shop/200152"
+    },
+    {
+      "competitor": "Промэлектроника",
+      "slug": "promelec",
+      "url": "https://www.promelec.ru/catalog/1/11/"
+    },
+    {
+      "competitor": "OUR",
+      "slug": "our",
+      "url": "data/our_catalog.html"
+    }
+  ]
+}

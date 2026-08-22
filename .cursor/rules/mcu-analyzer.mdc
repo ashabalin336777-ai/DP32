@@ -1,0 +1,15 @@
+---
+description: Constraints and step-by-step plan for the MCU competitor analyzer MVP
+alwaysApply: true
+---
+
+# MCU competitor analyzer
+
+Follow `.cursor/spec.md`. Implement one numbered step at a time and wait for user confirmation before the next step.
+
+- Numbers and deltas: Pandas / scikit-learn only. LLMs produce text and structured fields, never calculated metrics.
+- LLM I/O: `instructor` + Pydantic. Cache HTML→JSON with `diskcache`. Log model, tokens, confidence.
+- SQLite via `sqlite3` (no SQLAlchemy). Connections: context manager, 5s timeout.
+- No hardcoded API keys or URLs. `llm_confidence < 0.8` → `needs_review`. No LangChain/LangGraph.
+- On 429/500: backoff `sleep(2**retry)`. Playwright failure: skip URL, log, continue.
+- Layout lives in the repo root (`DP32`), not a nested `mcu-competitor-analyzer/` folder.
