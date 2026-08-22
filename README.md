@@ -1,32 +1,14 @@
 # DP32 — конкурентный анализ 32-бит МК
 
-Дипломный проект УИИ. MVP системы автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный отчёт.
+Дипломный проект УИИ. MVP системы автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный PDF-отчёт.
 
 Репозиторий: [ashabalin336777-ai/DP32](https://github.com/ashabalin336777-ai/DP32)
 
-## Что уже работает (шаги 1–6)
-
-| Шаг | Модуль | Результат |
-|-----|--------|-----------|
-| 1 | каркас | `requirements.txt`, `.env.example`, каталоги `src/`, `data/`, `reports/`, `logs/` |
-| 2 | `schema.sql`, `src/db.py` | SQLite WAL, upsert спецификаций, последний срез |
-| 3 | `src/config.py`, `src/extractor.py` | HTML → Pydantic `MCUExtractSpec`, кэш, `needs_review` |
-| 4 | `src/scraper.py` | Playwright, HTML в `data/raw/`, ошибка URL не роняет пайплайн |
-| 5 | `src/matcher.py` | KNN-аналоги, дельты цены/Flash/RAM, плюсы/минусы по порогу 5% |
-| 6 | `src/analyzer.py` | черновик отчёта + факты `VALID` / `INVALID` |
-
-Цифры и дельты считает Pandas / scikit-learn. LLM пишет текст и копирует значения из таблицы; выдуманные числа валидатор помечает как `INVALID` и отбрасывает.
-
-## Что дальше (шаги 7–10)
-
-- PDF/HTML через Jinja2 + WeasyPrint
-- оркестрация `python src/pipeline.py`
-- Docker Compose и cron на Timeweb VPS
-- pytest и финальная документация
+Цифры и дельты считает Pandas / scikit-learn. LLM пишет текст и копирует значения из таблицы; выдуманные числа валидатор помечает как `VALID`/`INVALID` и отбрасывает недоказанные тезисы.
 
 ## Стек
 
-Python 3.11+ · Pandas · scikit-learn · SQLite · Playwright · OpenAI-совместимый API (Neural Deep Pro: Qwen2.5-14B / 32B) · instructor · Pydantic · diskcache
+Python 3.11+ · Pandas · scikit-learn · SQLite · Playwright · Neural Deep Pro (Qwen2.5-14B / 32B) · instructor · Pydantic · Jinja2 · WeasyPrint · Docker
 
 ## Быстрый старт
 
@@ -38,40 +20,76 @@ playwright install chromium
 copy .env.example .env
 ```
 
-В `.env` укажите `NEURAL_DEEP_API_KEY`. Ключи в репозиторий не попадают.
-
-Проверки по модулям (без полного пайплайна):
+В `.env` укажите `NEURAL_DEEP_API_KEY`. Ключи в git не попадают.
 
 ```powershell
-python src/db.py
-python src/extractor.py
-python src/scraper.py
-python src/matcher.py
-python src/analyzer.py
+python src/pipeline.py
+pytest
 ```
 
-WeasyPrint понадобится на шаге 7 (на Windows часто нужен GTK).
+Отчёт: `reports/analysis_YYYY-MM-DD.pdf`. На Windows WeasyPrint часто требует GTK; тогда PDF собирается через Playwright.
 
-## Данные и цели скрейпинга
+## Пайплайн
 
-Список URL — в `data/scrape_targets.json` (не в коде):
+`python src/pipeline.py` — одна команда:
 
-- ЧипДип, Платан, Промэлектроника — публичные каталоги МК
-- OUR — локальный эталон `data/our_catalog.html`
+1. Playwright → HTML в `data/raw/`
+2. Агент 1 / правила → SQLite (`upsert_mcu_specs`)
+3. Последний срез `load_latest_snapshot`
+4. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
+5. Дельты `(our - comp) / comp` для цены, Flash, RAM (порог 5%)
+6. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
 
-При падении Playwright URL пропускается, пайплайн продолжается. На прогоне шага 4 ЧипДип ответил 403, Платан не открылся по таймауту; Промэлектроника и OUR сохранились.
+Логи: `logs/pipeline.log`, `logs/llm_calls.log`, `logs/alerts.log`. Падение URL в Playwright не останавливает прогон. Retry LLM ≤ 3, затем правила.
+
+## Модули
+
+| Модуль | Назначение |
+|--------|------------|
+| `src/scraper.py` | каталоги ЧипДип / Платан / Промэлектроника / OUR |
+| `src/extractor.py` | HTML → `MCUExtractSpec` |
+| `src/db.py` | SQLite WAL, без ORM |
+| `src/matcher.py` | аналоги и дельты |
+| `src/analyzer.py` | отчёт + VALID/INVALID |
+| `src/reporter.py` | Jinja2 → PDF |
+| `src/pipeline.py` | оркестрация |
+| `src/scheduler.py` | опциональный cron в контейнере |
+
+URL целей — в `data/scrape_targets.json`, не в коде. Эталон OUR: `data/our_catalog.html`.
+
+Пустой HTML → `0` / `"unknown"` и `llm_confidence < 0.5`. Ниже 0.8 → `needs_review`.
 
 ## База
 
-Файл: `data/mcu_competitors.db` (создаётся автоматически, в git не входит).
+`data/mcu_competitors.db` создаётся автоматически (в git не входит): `competitors`, `mcu_data`, `comparisons`, `reports`.
 
-Таблицы: `competitors`, `mcu_data`, `comparisons`, `reports`.
+## Тесты
 
-## Агенты
+```powershell
+pytest
+```
 
-1. **SpecExtractor** (`qwen2.5-14b-instruct`) — HTML → JSON по схеме. Нет данных → `0` / `"unknown"` и `llm_confidence < 0.5`. Ниже 0.8 → `needs_review`.
-2. **ReportAnalyst** (`qwen2.5-32b-instruct`) — текст отчёта. **FactValidator** сверяет `cited_facts` со строками сравнений.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез и HTML-отчёт. Живой LLM и сеть не требуются.
 
-## Конфигурация
+## Деплой (Timeweb VPS, когда сервер будет)
 
-См. `.env.example`. Основные переменные: модели Neural Deep, `DB_PATH`, пороги цены 5%, задержка скрейпинга, путь к `scrape_targets.json`.
+```bash
+cd /opt/mcu-analyzer
+docker compose up -d --build
+sudo cp deploy/crontab.example /etc/cron.d/mcu-analyzer
+sudo chmod +x deploy/backup.sh
+```
+
+Ежедневно в 03:00:
+
+`docker compose run --rm analyzer python src/pipeline.py`
+
+Пока контейнер держит `sleep infinity` + `restart: unless-stopped`. Не включайте одновременно host cron и `command: python src/scheduler.py`.
+
+Бэкап: `deploy/backup.sh` → `backups/mcu_YYYY-MM-DD.db`.
+
+## Ограничения MVP
+
+- Листинги конкурентов — это не карточка одной МК; без артикулов в HTML экстрактор может ничего не сохранить.
+- ЧипДип может ответить 403, Платан — таймаутом; пайплайн продолжает работу.
+- PDF на Windows без GTK идёт через Playwright; в Linux-образе — WeasyPrint.

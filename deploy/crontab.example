@@ -1,0 +1,19 @@
+# Timeweb VPS cron — pick ONE of the two options.
+# Install: sudo cp deploy/crontab.example /etc/cron.d/mcu-analyzer
+# (or: crontab -e and paste the lines). Paths assume the repo lives at /opt/mcu-analyzer.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# Option A (ТЗ): one-shot container each night at 03:00.
+# docker-compose.yml must keep `command: sleep infinity` (or not matter for `run --rm`).
+0 3 * * * root cd /opt/mcu-analyzer && docker compose run --rm analyzer python src/pipeline.py >> /opt/mcu-analyzer/logs/cron.log 2>&1
+
+# Weekly SQLite backup (Sunday 04:00). Bind-mounted data/ is on the host.
+0 4 * * 0 root /opt/mcu-analyzer/deploy/backup.sh /opt/mcu-analyzer >> /opt/mcu-analyzer/logs/backup.log 2>&1
+
+# Option B: do NOT enable the 03:00 line above. In docker-compose.yml set:
+#   command: python src/scheduler.py
+# then: docker compose up -d
+# SCHEDULE_HOUR=3 SCHEDULE_MINUTE=0 TZ=Europe/Moscow

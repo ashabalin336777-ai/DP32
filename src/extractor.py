@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import logging
+import re
 import sys
 import time
 from json import JSONDecodeError
@@ -312,6 +314,83 @@ class SpecExtractor:
             error=str(last_error) if last_error else "unknown",
         )
         return spec
+
+
+def _plain(text: str) -> str:
+    return html_lib.unescape(re.sub(r"<[^>]+>", " ", text))
+
+
+def _first_number(text: str) -> float | None:
+    match = re.search(r"(\d+(?:[.,]\d+)?)", text.replace(" ", ""))
+    if not match:
+        match = re.search(r"(\d+(?:[.,]\d+)?)", text)
+    if not match:
+        return None
+    return float(match.group(1).replace(",", "."))
+
+
+def extract_by_rules(html: str) -> list[MCUExtractSpec]:
+    """Deterministic fallback for article-based catalogs (OUR fixture)."""
+    specs: list[MCUExtractSpec] = []
+    articles = re.findall(r"<article\b[^>]*>(.*?)</article>", html, flags=re.I | re.S)
+    for article in articles:
+        heading = re.search(r"<h2\b[^>]*>(.*?)</h2>", article, flags=re.I | re.S)
+        part = _plain(heading.group(1)).strip() if heading else ""
+        if not part:
+            data_part = re.search(r'data-part="([^"]+)"', article, flags=re.I)
+            part = data_part.group(1) if data_part else "unknown"
+        fields: dict[str, object] = {
+            "part_number": part or "unknown",
+            "core_arch": "unknown",
+            "flash_kb": 0,
+            "ram_kb": 0,
+            "freq_mhz": 0.0,
+            "package": "unknown",
+            "price_rub": 0.0,
+            "delivery_days": 0,
+            "llm_confidence": 1.0,
+        }
+        for raw_li in re.findall(r"<li\b[^>]*>(.*?)</li>", article, flags=re.I | re.S):
+            line = " ".join(_plain(raw_li).split())
+            if ":" in line:
+                label, value = line.split(":", 1)
+            else:
+                label, value = line, ""
+            key = label.strip().lower()
+            value = value.strip()
+            number = _first_number(value)
+            if "ядро" in key:
+                fields["core_arch"] = value or "unknown"
+            elif "flash" in key:
+                fields["flash_kb"] = int(number or 0)
+            elif key.startswith("ram") or "озу" in key:
+                fields["ram_kb"] = int(number or 0)
+            elif "частот" in key:
+                fields["freq_mhz"] = float(number or 0)
+            elif "корпус" in key:
+                fields["package"] = value or "unknown"
+            elif "цен" in key:
+                fields["price_rub"] = float(number or 0)
+            elif "постав" in key or "дней" in key:
+                fields["delivery_days"] = int(number or 0)
+        spec = MCUExtractSpec.model_validate(fields)
+        if spec.part_number != "unknown":
+            specs.append(spec)
+    return specs
+
+
+def extract_specs_many(
+    html: str,
+    extractor: SpecExtractor | None = None,
+) -> list[MCUExtractSpec]:
+    """Rules first; LLM extract if the page is not an article catalog."""
+    ruled = extract_by_rules(html)
+    if ruled:
+        return ruled
+    spec = (extractor or SpecExtractor()).extract_specs(html)
+    if spec.part_number == "unknown":
+        return []
+    return [spec]
 
 
 def extract_specs(html: str) -> MCUExtractSpec:

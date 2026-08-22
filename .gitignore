@@ -30,7 +30,8 @@ reports/*.pdf
 reports/*.html
 logs/*
 !logs/.gitkeep
-backups/
+backups/*
+!backups/.gitkeep
 
 # IDE & OS
 .idea/

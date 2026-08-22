@@ -1,0 +1,21 @@
+services:
+  analyzer:
+    build: .
+    container_name: mcu-analyzer
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      PYTHONPATH: /app
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    working_dir: /app
+    # Default: idle container so host cron can `docker compose run --rm`.
+    # In-container daily run: command: python src/scheduler.py
+    command: ["sleep", "infinity"]
+    mem_limit: 3g
+    pids_limit: 256

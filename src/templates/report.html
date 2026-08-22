@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Конкурентный анализ МК — {{ report_date }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 14mm 18mm 14mm;
+      @bottom-center {
+        content: "DP32 · " counter(page) " / " counter(pages);
+        font-size: 9px;
+        color: #5b6570;
+      }
+    }
+    body {
+      font-family: "Segoe UI", "DejaVu Sans", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #1c2430;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 14px; margin: 18px 0 8px; border-bottom: 1px solid #d7dde3; padding-bottom: 4px; }
+    .meta { color: #5b6570; margin-bottom: 16px; }
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .badge-valid { background: #e5f6ea; color: #1f7a3a; }
+    .badge-invalid { background: #fdecea; color: #b42318; }
+    .badge-draft { background: #eef2f6; color: #3d4a57; }
+    ul { margin: 6px 0 10px 18px; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #d7dde3; padding: 5px 6px; text-align: left; vertical-align: top; }
+    th { background: #f3f6f9; font-size: 10px; text-transform: uppercase; letter-spacing: 0.02em; }
+    td.num, th.num { text-align: right; white-space: nowrap; }
+    .neg { color: #b42318; }
+    .pos { color: #1f7a3a; }
+    .muted { color: #5b6570; font-size: 10px; }
+    .hitl { background: #fff8e8; padding: 8px 10px; border: 1px solid #f0d78c; }
+  </style>
+</head>
+<body>
+  <h1>Конкурентный анализ 32-бит МК</h1>
+  <p class="meta">
+    Дата среза: {{ report_date }}
+    · статус <span class="badge badge-draft">{{ status }}</span>
+    · в выводы включены только факты VALID
+  </p>
+
+  <h2>Резюме</h2>
+  <p>{{ draft.executive_summary }}</p>
+
+  <h2>Преимущества</h2>
+  {% if draft.key_advantages %}
+  <ul>
+    {% for item in draft.key_advantages %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Подтверждённых преимуществ выше порога 5% нет.</p>
+  {% endif %}
+
+  <h2>Недостатки</h2>
+  {% if draft.key_disadvantages %}
+  <ul>
+    {% for item in draft.key_disadvantages %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Подтверждённых недостатков выше порога 5% нет.</p>
+  {% endif %}
+
+  <h2>Рекомендации</h2>
+  <ul>
+    {% for item in draft.recommendations %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+
+  <h2>Таблица сравнений</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Наша позиция</th>
+        <th>Аналог</th>
+        <th>Источник</th>
+        <th class="num">Δ цена %</th>
+        <th class="num">Δ Flash %</th>
+        <th class="num">Δ RAM %</th>
+        <th>Плюсы / минусы</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in comparison_rows %}
+      <tr>
+        <td>{{ row.our_part }}</td>
+        <td>{{ row.comp_part }}</td>
+        <td>{{ row.competitor_name }}</td>
+        <td class="num {{ row.price_class }}">{{ row.price_delta_pct }}</td>
+        <td class="num {{ row.flash_class }}">{{ row.flash_delta_pct }}</td>
+        <td class="num {{ row.ram_class }}">{{ row.ram_delta_pct }}</td>
+        <td>{{ row.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Валидированные факты</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Тезис</th>
+        <th>Метрика</th>
+        <th class="num">Наше</th>
+        <th class="num">Среднее аналогов</th>
+        <th>Строка</th>
+        <th>Статус</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fact in valid_facts %}
+      <tr>
+        <td>{{ fact.claim }}</td>
+        <td>{{ fact.metric }}</td>
+        <td class="num">{{ fact.our_val }}</td>
+        <td class="num">{{ fact.comp_avg }}</td>
+        <td class="num">{{ fact.source_row }}</td>
+        <td><span class="badge badge-valid">VALID</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if invalid_facts %}
+  <h2>Human-in-the-Loop</h2>
+  <div class="hitl">
+    <p>Эти тезисы не доказаны строками сравнений и <strong>не входят</strong> в выводы.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Тезис</th>
+          <th>Метрика</th>
+          <th class="num">our_val</th>
+          <th class="num">comp_avg</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fact in invalid_facts %}
+        <tr>
+          <td>{{ fact.claim }}</td>
+          <td>{{ fact.metric }}</td>
+          <td class="num">{{ fact.our_val }}</td>
+          <td class="num">{{ fact.comp_avg }}</td>
+          <td><span class="badge badge-invalid">INVALID</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</body>
+</html>
