@@ -53,6 +53,7 @@ pytest
 | `src/analyzer.py` | отчёт + VALID/INVALID |
 | `src/reporter.py` | Jinja2 → PDF |
 | `src/pipeline.py` | оркестрация |
+| `src/web.py` | демо-сайт отчётов |
 | `src/scheduler.py` | опциональный cron в контейнере |
 
 URL целей — в `data/scrape_targets.json`, не в коде. Эталон OUR: `data/our_catalog.html`.
@@ -71,7 +72,30 @@ pytest
 
 Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез и HTML-отчёт. Живой LLM и сеть не требуются.
 
-## Деплой (Timeweb VPS, когда сервер будет)
+## Демо-сайт (поддомен)
+
+На одном VPS с другим проектом DP32 слушает только `dp32.shastudio.ru`. Compose публикует веб на `127.0.0.1:8080`, чтобы не занимать 80/443 у соседнего сайта.
+
+Локально:
+
+```powershell
+python src/web.py
+```
+
+Откроется http://127.0.0.1:8080
+
+На сервере:
+
+```bash
+docker compose up -d --build
+sudo cp deploy/nginx-dp32.shastudio.ru.conf /etc/nginx/sites-available/dp32.shastudio.ru
+sudo ln -sf /etc/nginx/sites-available/dp32.shastudio.ru /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+A-запись `dp32.shastudio.ru` → IP VPS. HTTPS: `sudo certbot --nginx -d dp32.shastudio.ru`.
+
+## Деплой (Timeweb VPS)
 
 ```bash
 cd /opt/mcu-analyzer

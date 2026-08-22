@@ -19,3 +19,25 @@ services:
     command: ["sleep", "infinity"]
     mem_limit: 3g
     pids_limit: 256
+
+  web:
+    build: .
+    container_name: mcu-analyzer-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      PYTHONPATH: /app
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "8080"
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+    working_dir: /app
+    command: ["python", "src/web.py"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 512m
+    pids_limit: 64

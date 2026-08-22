@@ -45,6 +45,8 @@ class Settings:
     scrape_targets_path: Path
     raw_dir: Path
     user_agent: str
+    web_host: str
+    web_port: int
     price_adv_threshold: float
     price_dis_threshold: float
     confidence_review_threshold: float = CONFIDENCE_REVIEW_THRESHOLD
@@ -82,6 +84,8 @@ def get_settings() -> Settings:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         ),
+        web_host=os.getenv("WEB_HOST", "127.0.0.1"),
+        web_port=int(os.getenv("WEB_PORT", "8080")),
         price_adv_threshold=float(os.getenv("PRICE_ADV_THRESHOLD", "5.0")),
         price_dis_threshold=float(os.getenv("PRICE_DIS_THRESHOLD", "5.0")),
     )

@@ -211,6 +211,27 @@ def save_report(
         return int(cur.lastrowid)
 
 
+def load_latest_report(db_path: str | Path | None = None) -> dict[str, str] | None:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT generated_at, summary_json, file_path, status
+            FROM reports
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "generated_at": str(row["generated_at"]),
+        "summary_json": str(row["summary_json"] or ""),
+        "file_path": str(row["file_path"] or ""),
+        "status": str(row["status"] or "draft"),
+    }
+
+
 def list_tables(db_path: str | Path | None = None) -> list[str]:
     init_db(db_path)
     with get_connection(db_path) as conn:

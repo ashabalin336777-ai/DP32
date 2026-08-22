@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DP32 — конкурентный анализ 32-бит МК</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "DejaVu Sans", Arial, sans-serif;
+      background: #f4f6f8;
+      color: #1c2430;
+      line-height: 1.5;
+    }
+    header, main, footer { max-width: 960px; margin: 0 auto; padding: 20px 16px; }
+    header {
+      padding-top: 28px;
+    }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .lead { color: #5b6570; margin: 0 0 18px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+    .card { background: #fff; border: 1px solid #d7dde3; border-radius: 10px; padding: 14px; }
+    .card b { display: block; font-size: 22px; }
+    .card span { color: #5b6570; font-size: 13px; }
+    section { background: #fff; border: 1px solid #d7dde3; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    ul { margin: 0; padding-left: 18px; }
+    a { color: #155eef; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #edf1f4; font-size: 14px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #eef2f6; }
+    .actions a { display: inline-block; margin-right: 10px; margin-top: 8px; }
+    iframe { width: 100%; min-height: 640px; border: 1px solid #d7dde3; border-radius: 8px; background: #fff; }
+    footer { color: #5b6570; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DP32</h1>
+    <p class="lead">Дипломный проект УИИ: автоматический конкурентный анализ 32-битных микроконтроллеров. Цифры считает Pandas, выводы проверяются по фактам VALID/INVALID.</p>
+  </header>
+  <main>
+    <div class="cards">
+      <div class="card"><b>{{ snapshot_rows }}</b><span>строк в последнем срезе</span></div>
+      <div class="card"><b>{{ our_count }}</b><span>позиций OUR</span></div>
+      <div class="card"><b>{{ reports|length }}</b><span>файлов отчётов</span></div>
+      <div class="card"><b>{{ latest.status if latest else "нет" }}</b><span>статус последнего отчёта</span></div>
+    </div>
+
+    <section>
+      <h2>Последний отчёт</h2>
+      {% if latest %}
+      <p>Сформирован: {{ latest.generated_at }} · <span class="badge">{{ latest.status }}</span></p>
+      {% if summary %}
+      <p>{{ summary.executive_summary }}</p>
+      {% if summary.key_disadvantages %}
+      <p>Недостатки:</p>
+      <ul>
+        {% for item in summary.key_disadvantages %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if summary.key_advantages %}
+      <p>Преимущества:</p>
+      <ul>
+        {% for item in summary.key_advantages %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% endif %}
+      <p class="actions">
+        {% if pdf_report %}<a href="{{ pdf_report.href }}">Скачать PDF</a>{% endif %}
+        {% if html_report %}<a href="{{ html_report.href }}">Открыть HTML</a>{% endif %}
+      </p>
+      {% else %}
+      <p>Отчётов пока нет. На сервере выполните <code>python src/pipeline.py</code> или ночной cron.</p>
+      {% endif %}
+    </section>
+
+    {% if html_report %}
+    <section>
+      <h2>Просмотр HTML</h2>
+      <iframe title="Последний HTML-отчёт" src="{{ html_report.href }}"></iframe>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Архив</h2>
+      {% if reports %}
+      <table>
+        <thead><tr><th>Файл</th><th>Тип</th><th>Размер</th></tr></thead>
+        <tbody>
+          {% for item in reports %}
+          <tr>
+            <td><a href="{{ item.href }}">{{ item.name }}</a></td>
+            <td>{{ item.kind }}</td>
+            <td>{{ item.size_kb }} KB</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>Папка reports пуста.</p>
+      {% endif %}
+    </section>
+  </main>
+  <footer>
+    Демо: dp32.shastudio.ru · пайплайн не является публичным API, открыты только отчёты.
+  </footer>
+</body>
+</html>
