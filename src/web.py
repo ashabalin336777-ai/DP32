@@ -135,10 +135,16 @@ class DemoHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def _bind_host(configured: str) -> str:
+    if Path("/.dockerenv").exists() and configured in {"127.0.0.1", "localhost"}:
+        return "0.0.0.0"
+    return configured
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = get_settings()
-    host = settings.web_host
+    host = _bind_host(settings.web_host)
     port = settings.web_port
     httpd = ThreadingHTTPServer((host, port), DemoHandler)
     logging.getLogger("mcu.web").info("demo listening on http://%s:%s", host, port)

@@ -38,6 +38,8 @@ services:
     working_dir: /app
     command: ["python", "src/web.py"]
     ports:
-      - "127.0.0.1:8080:8080"
+      # Host 8080 is taken by pac-searxng. Public HTTPS goes through
+      # shastudio-nginx; attach this container to shastudio_default.
+      - "127.0.0.1:8082:8080"
     mem_limit: 512m
     pids_limit: 64

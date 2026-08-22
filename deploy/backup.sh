@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-ROOT="${1:-/opt/mcu-analyzer}"
+ROOT="${1:-/opt/dp32}"
 DB="${ROOT}/data/mcu_competitors.db"
 DEST="${ROOT}/backups"
 STAMP="$(date +%F)"

@@ -39,5 +39,6 @@ COPY data/scrape_targets.json data/our_catalog.html /app/data/
 
 # Keep the service alive for `restart: unless-stopped`.
 # Daily job: host cron `docker compose run --rm analyzer python src/pipeline.py`
+# Repo on VPS: /opt/dp32
 # or override command to `python src/scheduler.py`.
 CMD ["sleep", "infinity"]

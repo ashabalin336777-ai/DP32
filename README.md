@@ -1,7 +1,8 @@
 # DP32 — конкурентный анализ 32-бит МК
 
-Дипломный проект УИИ. MVP системы автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный PDF-отчёт.
+Дипломный проект УИИ. MVP автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный PDF-отчёт.
 
+**Демо:** [https://dp32.shastudio.ru](https://dp32.shastudio.ru)  
 Репозиторий: [ashabalin336777-ai/DP32](https://github.com/ashabalin336777-ai/DP32)
 
 Цифры и дельты считает Pandas / scikit-learn. LLM пишет текст и копирует значения из таблицы; выдуманные числа валидатор помечает как `VALID`/`INVALID` и отбрасывает недоказанные тезисы.
@@ -25,9 +26,10 @@ copy .env.example .env
 ```powershell
 python src/pipeline.py
 pytest
+python src/web.py
 ```
 
-Отчёт: `reports/analysis_YYYY-MM-DD.pdf`. На Windows WeasyPrint часто требует GTK; тогда PDF собирается через Playwright.
+Отчёт: `reports/analysis_YYYY-MM-DD.pdf`. На Windows WeasyPrint часто требует GTK; тогда PDF собирается через Playwright. Локальная витрина: http://127.0.0.1:8080
 
 ## Пайплайн
 
@@ -41,6 +43,8 @@ pytest
 6. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
 
 Логи: `logs/pipeline.log`, `logs/llm_calls.log`, `logs/alerts.log`. Падение URL в Playwright не останавливает прогон. Retry LLM ≤ 3, затем правила.
+
+Если в срезе только OUR и нет конкурентов, отчёт остаётся `draft` с текстом «Недостаточно данных для конкурентного отчёта» — цифры не выдумываются.
 
 ## Модули
 
@@ -70,36 +74,70 @@ URL целей — в `data/scrape_targets.json`, не в коде. Эталон
 pytest
 ```
 
-Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез и HTML-отчёт. Живой LLM и сеть не требуются.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт и демо-страница. Живой LLM и сеть не требуются.
 
-## Демо-сайт (поддомен)
+## Деплой на Timeweb VPS
 
-На одном VPS с другим проектом DP32 слушает только `dp32.shastudio.ru`. Compose публикует веб на `127.0.0.1:8080`, чтобы не занимать 80/443 у соседнего сайта.
+Каталог проекта: **`/opt/dp32`**. На той же машине SHA Studio и PAC.
 
-Локально:
+| Кто | Порты |
+|-----|--------|
+| `shastudio-nginx` | **80 / 443** — единственный публичный nginx |
+| `pac-searxng` | хост **8080** |
+| `mcu-analyzer-web` | хост **127.0.0.1:8082** → контейнер 8080 |
+| `mcu-analyzer` | пайплайн, без публикации портов |
 
-```powershell
-python src/web.py
-```
+Второй nginx на хост не ставить: 80/443 уже заняты.
 
-Откроется http://127.0.0.1:8080
-
-На сервере:
-
-```bash
-docker compose up -d --build
-sudo cp deploy/nginx-dp32.shastudio.ru.conf /etc/nginx/sites-available/dp32.shastudio.ru
-sudo ln -sf /etc/nginx/sites-available/dp32.shastudio.ru /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-A-запись `dp32.shastudio.ru` → IP VPS. HTTPS: `sudo certbot --nginx -d dp32.shastudio.ru`.
-
-## Деплой (Timeweb VPS)
+### Контейнеры
 
 ```bash
-cd /opt/mcu-analyzer
+cd /opt/dp32
+cp .env.example .env   # затем вписать NEURAL_DEEP_API_KEY
 docker compose up -d --build
+curl -sS http://127.0.0.1:8082/healthz
+```
+
+В Compose у `web` задано `WEB_HOST=0.0.0.0`. Если в `.env` оставить `127.0.0.1`, процесс внутри контейнера всё равно слушает `0.0.0.0` (проверка `/.dockerenv` в `src/web.py`).
+
+Веб должен быть в сети SHA Studio, иначе nginx не резолвит имя контейнера:
+
+```bash
+docker network connect shastudio_default mcu-analyzer-web
+```
+
+`docker compose up --force-recreate web` отключает эту сеть — команду нужно повторить.
+
+Первый отчёт на сервере:
+
+```bash
+cd /opt/dp32
+docker compose run --rm analyzer python src/pipeline.py
+```
+
+После этого файлы появляются на https://dp32.shastudio.ru
+
+### HTTPS через `shastudio-nginx`
+
+Прод-конфиг: `deploy/shastudio-nginx-dp32.conf`. Копировать в `/opt/SHASTUDIO/deploy/nginx/conf.d/dp32.shastudio.ru.conf`.
+
+1. HTTP vhost с `location /.well-known/acme-challenge/` и `proxy_pass http://mcu-analyzer-web:8080`
+2. Сертификат certbot webroot в `/opt/SHASTUDIO/deploy/certs` (том `shastudio_nginx_certbot_www`)
+3. Включить 443 + редирект 80→443, затем:
+
+```bash
+docker exec shastudio-nginx nginx -t
+docker exec shastudio-nginx nginx -s reload
+curl -sS --resolve dp32.shastudio.ru:443:127.0.0.1 https://dp32.shastudio.ru/healthz
+```
+
+`proxy_pass` на `127.0.0.1` изнутри nginx-контейнера не работает. Нужен Docker DNS: `http://mcu-analyzer-web:8080`.
+
+HTTP-only черновик (без TLS): `deploy/nginx-dp32.shastudio.ru.conf`.
+
+### Cron и бэкап
+
+```bash
 sudo cp deploy/crontab.example /etc/cron.d/mcu-analyzer
 sudo chmod +x deploy/backup.sh
 ```
@@ -115,5 +153,6 @@ sudo chmod +x deploy/backup.sh
 ## Ограничения MVP
 
 - Листинги конкурентов — это не карточка одной МК; без артикулов в HTML экстрактор может ничего не сохранить.
-- ЧипДип может ответить 403, Платан — таймаутом; пайплайн продолжает работу.
+- ЧипДип может ответить 403, Платан — таймаутом; пайплайн продолжает работу и отдаёт `draft`.
 - PDF на Windows без GTK идёт через Playwright; в Linux-образе — WeasyPrint.
+- `force-recreate` веб-контейнера сбрасывает `shastudio_default` — сеть нужно подключить снова.
