@@ -35,7 +35,8 @@ RUN mkdir -p data/raw reports logs backups \
 
 COPY schema.sql ./
 COPY src ./src
-COPY data/scrape_targets.json data/our_catalog.html /app/data/
+COPY data/scrape_targets.json data/our_catalog.html data/platan_catalog.html \
+     data/chipdip_catalog.html data/promelec_catalog.html /app/data/
 
 # Keep the service alive for `restart: unless-stopped`.
 # Daily job: host cron `docker compose run --rm analyzer python src/pipeline.py`

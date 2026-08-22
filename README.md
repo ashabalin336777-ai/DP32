@@ -2,7 +2,7 @@
 
 Дипломный проект УИИ. MVP автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный PDF-отчёт.
 
-**Демо:** [https://dp32.shastudio.ru](https://dp32.shastudio.ru)  
+**Демо:** [https://dp32.shastudio.ru](https://dp32.shastudio.ru) — эталон OUR (две позиции) и поиск артикула.  
 Репозиторий: [ashabalin336777-ai/DP32](https://github.com/ashabalin336777-ai/DP32)
 
 Цифры и дельты считает Pandas / scikit-learn. LLM пишет текст и копирует значения из таблицы; выдуманные числа валидатор помечает как `VALID`/`INVALID` и отбрасывает недоказанные тезисы.
@@ -21,7 +21,7 @@ playwright install chromium
 copy .env.example .env
 ```
 
-В `.env` укажите `NEURAL_DEEP_API_KEY`. Ключи в git не попадают.
+В `.env` укажите `NEURAL_DEEP_API_KEY`. Опционально `TAVILY_API_KEY` для запасного сбора. Ключи в git не попадают.
 
 ```powershell
 python src/pipeline.py
@@ -35,7 +35,7 @@ python src/web.py
 
 `python src/pipeline.py` — одна команда:
 
-1. Playwright → HTML в `data/raw/`
+1. Playwright → HTML в `data/raw/` (при 403/timeout — Tavily Extract, если задан ключ)
 2. Агент 1 / правила → SQLite (`upsert_mcu_specs`)
 3. Последний срез `load_latest_snapshot`
 4. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
@@ -51,6 +51,7 @@ python src/web.py
 | Модуль | Назначение |
 |--------|------------|
 | `src/scraper.py` | каталоги ЧипДип / Платан / Промэлектроника / OUR |
+| `src/scrape_fallback.py` | Tavily Extract после ошибки Playwright |
 | `src/extractor.py` | HTML → `MCUExtractSpec` |
 | `src/db.py` | SQLite WAL, без ORM |
 | `src/matcher.py` | аналоги и дельты |
@@ -60,7 +61,7 @@ python src/web.py
 | `src/web.py` | демо-сайт отчётов |
 | `src/scheduler.py` | опциональный cron в контейнере |
 
-URL целей — в `data/scrape_targets.json`, не в коде. Эталон OUR: `data/our_catalog.html`.
+URL целей — в `data/scrape_targets.json`, не в коде. Локальные каталоги (по две карточки STM32): `data/our_catalog.html`, `data/platan_catalog.html`, `data/chipdip_catalog.html`, `data/promelec_catalog.html`.
 
 Пустой HTML → `0` / `"unknown"` и `llm_confidence < 0.5`. Ниже 0.8 → `needs_review`.
 
@@ -74,7 +75,23 @@ URL целей — в `data/scrape_targets.json`, не в коде. Эталон
 pytest
 ```
 
-Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт и демо-страница. Живой LLM и сеть не требуются.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, демо-страница и Tavily-fallback (мок HTTP). Живой LLM и сеть не требуются.
+
+## Запасной сбор (Tavily, не MCP в кроне)
+
+Playwright остаётся основным каналом. Из MCP-вариантов в пайплайн подходит только **Tavily Extract** (один ключ, текст конкретной страницы).
+
+| Вариант | В DP32 |
+|---------|--------|
+| Playwright MCP | Дубль уже встроенного Chromium, 403 не лечит |
+| Minimax Search | Три ключа и чужая LLM-сводка — не по ТЗ |
+| Tavily Extract | Fallback после 403/timeout; `search` не вызываем |
+
+Ночной `docker compose run` **не** поднимает `npx tavily-mcp`. Если в `.env` есть `TAVILY_API_KEY` и `SCRAPE_FALLBACK=tavily`, упавший Playwright-URL уходит в HTTP extract; ответ оборачивается в HTML и пишется в `data/raw/`. Пустой ключ или `SCRAPE_FALLBACK=off` — поведение как раньше.
+
+Ключ только в `.env` на VPS (в git не попадает). ЧипДип/Платан могут отказать и Tavily — тогда skip и `draft`.
+
+Опционально тот же ключ можно дать Cursor (агент, не крон): скопировать [`deploy/cursor-mcp-tavily.json.example`](deploy/cursor-mcp-tavily.json.example) в настройки MCP клиента.
 
 ## Деплой на Timeweb VPS
 

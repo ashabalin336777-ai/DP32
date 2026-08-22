@@ -61,9 +61,66 @@ def test_extract_by_rules_our_catalog(our_catalog_html: str) -> None:
     assert f103.ram_kb == 20
     assert f103.freq_mhz == 72
     assert f103.package == "LQFP48"
+    assert f103.pins_count == 48
     assert f103.price_rub == 210
     assert f103.llm_confidence == 1.0
     assert f103.needs_review is False
+
+
+def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
+    specs = extract_by_rules(platan_catalog_html)
+    parts = {item.part_number: item for item in specs}
+    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    f103 = parts["STM32F103C8T6"]
+    assert f103.core_arch == "ARM Cortex M3"
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 20
+    assert f103.freq_mhz == 72
+    assert f103.package == "LQFP-48"
+    assert f103.pins_count == 48
+    assert f103.price_rub == 150
+    f411 = parts["STM32F411CEU6"]
+    assert f411.core_arch == "ARM Cortex M4"
+    assert f411.flash_kb == 512
+    assert f411.ram_kb == 0
+    assert f411.freq_mhz == 0
+    assert f411.package == "UFQFPN-48"
+    assert f411.price_rub == 473.77
+
+
+def test_extract_by_rules_chipdip_catalog(chipdip_catalog_html: str) -> None:
+    specs = extract_by_rules(chipdip_catalog_html)
+    parts = {item.part_number: item for item in specs}
+    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    f103 = parts["STM32F103C8T6"]
+    assert f103.core_arch == "Cortex-M3"
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 0
+    assert f103.freq_mhz == 72
+    assert f103.price_rub == 160
+    f411 = parts["STM32F411CEU6"]
+    assert f411.flash_kb == 512
+    assert f411.ram_kb == 128
+    assert f411.freq_mhz == 100
+    assert f411.price_rub == 450
+
+
+def test_extract_by_rules_promelec_catalog(promelec_catalog_html: str) -> None:
+    specs = extract_by_rules(promelec_catalog_html)
+    parts = {item.part_number: item for item in specs}
+    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    f103 = parts["STM32F103C8T6"]
+    assert f103.core_arch == "ARM Cortex-M3"
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 20
+    assert f103.freq_mhz == 72
+    assert f103.price_rub == 175.04
+    f411 = parts["STM32F411CEU6"]
+    assert f411.core_arch == "ARM Cortex-M4"
+    assert f411.flash_kb == 512
+    assert f411.ram_kb == 0
+    assert f411.freq_mhz == 100
+    assert f411.price_rub == 468.93
 
 
 def test_extract_specs_many_prefers_rules(our_catalog_html: str) -> None:

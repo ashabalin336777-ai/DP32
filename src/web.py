@@ -8,7 +8,7 @@ import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -16,8 +16,9 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from src.config import get_settings  # noqa: E402
+from src.config import ROOT, get_settings  # noqa: E402
 from src.db import load_latest_report, load_latest_snapshot  # noqa: E402
+from src.extractor import extract_by_rules  # noqa: E402
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 ALLOWED_REPORT_SUFFIXES = {".pdf", ".html"}
@@ -64,17 +65,48 @@ def safe_report_path(name: str) -> Path | None:
     return path
 
 
-def build_demo_context() -> dict[str, object]:
+def load_our_parts() -> list[dict[str, object]]:
+    path = ROOT / "data" / "our_catalog.html"
+    if not path.is_file():
+        return []
+    html = path.read_text(encoding="utf-8")
+    return [spec.model_dump() for spec in extract_by_rules(html)]
+
+
+def find_part_rows(
+    query: str,
+    our_parts: list[dict[str, object]],
+    snapshot_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    needle = query.strip().casefold()
+    if not needle:
+        return []
+    found: list[dict[str, object]] = []
+    for item in our_parts:
+        if str(item.get("part_number", "")).casefold() == needle:
+            found.append({**item, "competitor_name": "OUR"})
+    for row in snapshot_rows:
+        if str(row.get("part_number", "")).casefold() != needle:
+            continue
+        if str(row.get("competitor_name", "")) == "OUR":
+            continue
+        found.append(row)
+    return found
+
+
+def build_demo_context(query_part: str = "") -> dict[str, object]:
     reports = list_report_files()
     latest = None
+    snap_records: list[dict[str, object]] = []
     snapshot_rows = 0
     our_count = 0
     try:
         latest = load_latest_report()
         snapshot = load_latest_snapshot()
-        snapshot_rows = len(snapshot)
-        if not snapshot.empty and "competitor_name" in snapshot.columns:
-            our_count = int((snapshot["competitor_name"] == "OUR").sum())
+        if not snapshot.empty:
+            snap_records = snapshot.to_dict(orient="records")
+            snapshot_rows = len(snap_records)
+            our_count = sum(1 for row in snap_records if row.get("competitor_name") == "OUR")
     except Exception:
         latest = None
     summary = None
@@ -85,19 +117,24 @@ def build_demo_context() -> dict[str, object]:
             summary = None
     html_report = next((item for item in reports if item["kind"] == "html"), None)
     pdf_report = next((item for item in reports if item["kind"] == "pdf"), None)
+    our_parts = load_our_parts()
+    query = query_part.strip()
     return {
         "reports": reports,
         "latest": latest,
         "summary": summary,
         "snapshot_rows": snapshot_rows,
-        "our_count": our_count,
+        "our_count": our_count or len(our_parts),
         "html_report": html_report,
         "pdf_report": pdf_report,
+        "our_parts": our_parts,
+        "query_part": query,
+        "query_hits": find_part_rows(query, our_parts, snap_records),
     }
 
 
-def render_demo_html() -> str:
-    return _jinja().get_template("demo.html").render(**build_demo_context())
+def render_demo_html(query_part: str = "") -> str:
+    return _jinja().get_template("demo.html").render(**build_demo_context(query_part))
 
 
 class DemoHandler(BaseHTTPRequestHandler):
@@ -108,7 +145,8 @@ class DemoHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = unquote(parsed.path)
         if route in {"/", "/index.html"}:
-            body = render_demo_html().encode("utf-8")
+            query_part = (parse_qs(parsed.query).get("part") or [""])[0]
+            body = render_demo_html(query_part).encode("utf-8")
             self._send(200, "text/html; charset=utf-8", body)
             return
         if route == "/healthz":

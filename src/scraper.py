@@ -22,6 +22,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.config import ROOT, get_settings, write_alert  # noqa: E402
+from src.scrape_fallback import extract_url_via_tavily  # noqa: E402
 
 ALLOWED_COMPETITORS = {"ЧипДип", "Платан", "Промэлектроника", "OUR"}
 
@@ -208,7 +209,17 @@ async def scrape_target(target: ScrapeTarget) -> ScrapeResult:
         logger.info("saved %s -> %s (%s bytes)", target.url, saved, saved.stat().st_size)
         return ScrapeResult(target=target, path=saved, ok=True)
     except Exception as exc:
-        logger.error("skip %s (%s): %s", target.competitor, target.url, exc)
+        logger.error("playwright skip %s (%s): %s", target.competitor, target.url, exc)
+        fallback_html = extract_url_via_tavily(target.url)
+        if fallback_html:
+            saved = _save_html(dest, fallback_html, source_url=target.url)
+            logger.info(
+                "scrape_fallback=tavily saved %s -> %s (%s bytes)",
+                target.url,
+                saved,
+                saved.stat().st_size,
+            )
+            return ScrapeResult(target=target, path=saved, ok=True)
         write_alert(f"scrape_failed competitor={target.competitor} url={target.url} error={exc}")
         return ScrapeResult(target=target, path=None, ok=False, error=str(exc))
 

@@ -31,6 +31,24 @@
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #edf1f4; font-size: 14px; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #eef2f6; }
     .actions a { display: inline-block; margin-right: 10px; margin-top: 8px; }
+    .lookup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+    .lookup input {
+      flex: 1 1 220px;
+      min-width: 180px;
+      padding: 8px 10px;
+      border: 1px solid #c5ced6;
+      border-radius: 8px;
+      font: inherit;
+    }
+    .lookup button {
+      padding: 8px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: #155eef;
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+    }
     iframe { width: 100%; min-height: 640px; border: 1px solid #d7dde3; border-radius: 8px; background: #fff; }
     footer { color: #5b6570; font-size: 13px; }
   </style>
@@ -47,6 +65,78 @@
       <div class="card"><b>{{ reports|length }}</b><span>файлов отчётов</span></div>
       <div class="card"><b>{{ latest.status if latest else "нет" }}</b><span>статус последнего отчёта</span></div>
     </div>
+
+    <section>
+      <h2>Эталон OUR</h2>
+      {% if our_parts %}
+      <table>
+        <thead>
+          <tr>
+            <th>Артикул</th>
+            <th>Ядро</th>
+            <th>Flash</th>
+            <th>RAM</th>
+            <th>Частота</th>
+            <th>Корпус</th>
+            <th>Цена</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in our_parts %}
+          <tr>
+            <td>{{ item.part_number }}</td>
+            <td>{{ item.core_arch }}</td>
+            <td>{{ item.flash_kb }} KB</td>
+            <td>{{ item.ram_kb }} KB</td>
+            <td>{{ item.freq_mhz }} MHz</td>
+            <td>{{ item.package }}</td>
+            <td>{{ item.price_rub }} ₽</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>Эталонный каталог не найден.</p>
+      {% endif %}
+      <form class="lookup" method="get" action="/">
+        <label for="part">Микроконтроллер</label>
+        <input id="part" name="part" type="text" value="{{ query_part }}" placeholder="STM32F103C8T6" autocomplete="off">
+        <button type="submit">Найти</button>
+      </form>
+      {% if query_part %}
+        {% if query_hits %}
+        <p>Найдено по запросу <code>{{ query_part }}</code>:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Источник</th>
+              <th>Артикул</th>
+              <th>Ядро</th>
+              <th>Flash</th>
+              <th>RAM</th>
+              <th>Частота</th>
+              <th>Цена</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in query_hits %}
+            <tr>
+              <td>{{ row.competitor_name }}</td>
+              <td>{{ row.part_number }}</td>
+              <td>{{ row.core_arch }}</td>
+              <td>{{ row.flash_kb }} KB</td>
+              <td>{{ row.ram_kb }} KB</td>
+              <td>{{ row.freq_mhz }} MHz</td>
+              <td>{{ row.price_rub }} ₽</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p>По запросу <code>{{ query_part }}</code> нет совпадений в эталоне и в последнем срезе.</p>
+        {% endif %}
+      {% endif %}
+    </section>
 
     <section>
       <h2>Последний отчёт</h2>

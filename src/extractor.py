@@ -55,6 +55,7 @@ class MCUExtractSpec(BaseModel):
     ram_kb: int = Field(default=0, ge=0)
     freq_mhz: float = Field(default=0, ge=0)
     package: str = Field(default="unknown")
+    pins_count: int = Field(default=0, ge=0)
     price_rub: float = Field(default=0, ge=0)
     delivery_days: int = Field(default=0, ge=0)
     llm_confidence: float = Field(default=EMPTY_HTML_CONFIDENCE, ge=0.0, le=1.0)
@@ -72,6 +73,7 @@ class MCUExtractSpec(BaseModel):
         "flash_kb",
         "ram_kb",
         "freq_mhz",
+        "pins_count",
         "price_rub",
         "delivery_days",
         mode="before",
@@ -112,6 +114,7 @@ def _fallback_spec() -> MCUExtractSpec:
         ram_kb=0,
         freq_mhz=0.0,
         package="unknown",
+        pins_count=0,
         price_rub=0.0,
         delivery_days=0,
         llm_confidence=EMPTY_HTML_CONFIDENCE,
@@ -346,6 +349,7 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
             "ram_kb": 0,
             "freq_mhz": 0.0,
             "package": "unknown",
+            "pins_count": 0,
             "price_rub": 0.0,
             "delivery_days": 0,
             "llm_confidence": 1.0,
@@ -369,6 +373,8 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
                 fields["freq_mhz"] = float(number or 0)
             elif "корпус" in key:
                 fields["package"] = value or "unknown"
+            elif "вывод" in key:
+                fields["pins_count"] = int(number or 0)
             elif "цен" in key:
                 fields["price_rub"] = float(number or 0)
             elif "постав" in key or "дней" in key:

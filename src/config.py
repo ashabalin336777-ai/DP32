@@ -49,6 +49,9 @@ class Settings:
     web_port: int
     price_adv_threshold: float
     price_dis_threshold: float
+    tavily_api_key: str = ""
+    tavily_extract_url: str = ""
+    scrape_fallback: str = "tavily"
     confidence_review_threshold: float = CONFIDENCE_REVIEW_THRESHOLD
     llm_max_retries: int = LLM_MAX_RETRIES
     connect_timeout_sec: float = CONNECT_TIMEOUT_SEC
@@ -58,6 +61,16 @@ class Settings:
     def has_api_key(self) -> bool:
         key = self.neural_deep_api_key.strip()
         return bool(key) and key != "your_token_here"
+
+    @property
+    def has_tavily_key(self) -> bool:
+        key = self.tavily_api_key.strip()
+        return bool(key) and key not in {"your_token_here", "your_tavily_api_key_here"}
+
+    @property
+    def tavily_fallback_enabled(self) -> bool:
+        mode = (self.scrape_fallback or "tavily").strip().lower()
+        return mode == "tavily" and self.has_tavily_key
 
 
 @lru_cache(maxsize=1)
@@ -88,6 +101,11 @@ def get_settings() -> Settings:
         web_port=int(os.getenv("WEB_PORT", "8080")),
         price_adv_threshold=float(os.getenv("PRICE_ADV_THRESHOLD", "5.0")),
         price_dis_threshold=float(os.getenv("PRICE_DIS_THRESHOLD", "5.0")),
+        tavily_api_key=os.getenv("TAVILY_API_KEY", ""),
+        tavily_extract_url=os.getenv(
+            "TAVILY_EXTRACT_URL", "https://api.tavily.com/extract"
+        ),
+        scrape_fallback=os.getenv("SCRAPE_FALLBACK", "tavily"),
     )
     ensure_runtime_dirs(settings)
     return settings
