@@ -28,6 +28,7 @@ MCU_COLUMNS: tuple[str, ...] = (
     "pins_count",
     "price_rub",
     "stock_status",
+    "stock_qty",
     "delivery_days",
     "scraped_at",
     "source_url",
@@ -76,7 +77,14 @@ def init_db(db_path: str | Path | None = None) -> Path:
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     with get_connection(path) as conn:
         conn.executescript(schema)
+        _ensure_mcu_columns(conn)
     return path
+
+
+def _ensure_mcu_columns(conn: sqlite3.Connection) -> None:
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(mcu_data)")}
+    if "stock_qty" not in cols:
+        conn.execute("ALTER TABLE mcu_data ADD COLUMN stock_qty INTEGER")
 
 
 def _competitor_id(conn: sqlite3.Connection, comp_name: str) -> int:
@@ -121,7 +129,7 @@ def upsert_mcu_specs(
     else:
         payload["scraped_at"] = payload["scraped_at"].fillna(_utc_now())
 
-    for optional in ("pins_count", "stock_status", "source_url"):
+    for optional in ("pins_count", "stock_status", "stock_qty", "source_url"):
         if optional not in payload.columns:
             payload[optional] = pd.NA
 
@@ -172,6 +180,7 @@ def load_latest_snapshot(db_path: str | Path | None = None) -> pd.DataFrame:
             m.pins_count,
             m.price_rub,
             m.stock_status,
+            m.stock_qty,
             m.delivery_days,
             m.scraped_at,
             m.source_url,

@@ -1,0 +1,50 @@
+{
+  "our_parts": ["STM32F103C8T6", "STM32F411CEU6"],
+  "sites": {
+    "chipdip": {
+      "listing": {
+        "item": ".item, .catalog-item",
+        "part": ".item__name a, .item__name, a.name",
+        "core": ".item__core",
+        "flash": ".item__flash",
+        "ram": ".item__ram",
+        "freq": ".item__freq",
+        "package": ".item__package",
+        "price": ".price, .item__price",
+        "stock": ".item__avail, .avail, .item-avail"
+      },
+      "product": {
+        "part": "h1, .product__name, .itemname",
+        "param_row": "table.chars tr, .specs tr, .product-params tr",
+        "price": ".price, .product__price, .item-price",
+        "stock": ".avail, .product__avail, .item-avail, .item__avail"
+      }
+    },
+    "platan": {
+      "product": {
+        "part": "h1, .name, td.name, .item-name",
+        "param_row": "table tr, .params tr",
+        "price": ".price, td.price, .item-price",
+        "stock": ".qty, td.qty, .avail, .sklad"
+      }
+    },
+    "promelec": {
+      "listing": {
+        "item": ".table-list__item",
+        "part": ".product-preview__title",
+        "param_row": ".param-row",
+        "param_cells": ".param-cell",
+        "stock_label": ".table-list__mob-title",
+        "stock_value": ".table-list__counter",
+        "stock_name": "Наличие",
+        "price": ".price-from-1, .warehouse-instock .price-from-1"
+      },
+      "product": {
+        "part": "h1, .product-name, [itemprop=name]",
+        "param_row": "table.params tr, .param-row, table tr",
+        "price": ".warehouse-instock .price-from-1, .price-from-1",
+        "stock": ".warehouse-instock .iBox-amount__counter, .iBox-amount__counter"
+      }
+    }
+  }
+}

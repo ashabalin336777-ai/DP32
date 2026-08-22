@@ -9,11 +9,13 @@ import logging
 import re
 import sys
 import time
+from functools import lru_cache
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
 import diskcache
+from bs4 import BeautifulSoup, Tag
 import instructor
 from openai import (
     APIStatusError,
@@ -31,10 +33,13 @@ if str(_ROOT) not in sys.path:
 from src.config import (  # noqa: E402
     CONFIDENCE_REVIEW_THRESHOLD,
     EMPTY_HTML_CONFIDENCE,
+    ROOT,
     get_llm_logger,
     get_settings,
     write_alert,
 )
+
+SELECTORS_PATH = ROOT / "data" / "extract_selectors.json"
 
 EXTRACT_SYSTEM_PROMPT = """You extract microcontroller catalog specs from HTML.
 Return only fields from the provided JSON schema.
@@ -57,6 +62,7 @@ class MCUExtractSpec(BaseModel):
     package: str = Field(default="unknown")
     pins_count: int = Field(default=0, ge=0)
     price_rub: float = Field(default=0, ge=0)
+    stock_qty: int = Field(default=0, ge=0)
     delivery_days: int = Field(default=0, ge=0)
     llm_confidence: float = Field(default=EMPTY_HTML_CONFIDENCE, ge=0.0, le=1.0)
 
@@ -75,6 +81,7 @@ class MCUExtractSpec(BaseModel):
         "freq_mhz",
         "pins_count",
         "price_rub",
+        "stock_qty",
         "delivery_days",
         mode="before",
     )
@@ -116,6 +123,7 @@ def _fallback_spec() -> MCUExtractSpec:
         package="unknown",
         pins_count=0,
         price_rub=0.0,
+        stock_qty=0,
         delivery_days=0,
         llm_confidence=EMPTY_HTML_CONFIDENCE,
     )
@@ -332,6 +340,252 @@ def _first_number(text: str) -> float | None:
     return float(match.group(1).replace(",", "."))
 
 
+def _memory_kb(text: str) -> int:
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*[kк]", text, flags=re.I)
+    if match:
+        return int(float(match.group(1).replace(",", ".")))
+    number = _first_number(text)
+    return int(number or 0)
+
+
+def _visible(node: Tag | None) -> str:
+    if node is None:
+        return ""
+    return " ".join(node.get_text(" ", strip=True).split())
+
+
+def _empty_fields() -> dict[str, object]:
+    return {
+        "part_number": "unknown",
+        "core_arch": "unknown",
+        "flash_kb": 0,
+        "ram_kb": 0,
+        "freq_mhz": 0.0,
+        "package": "unknown",
+        "pins_count": 0,
+        "price_rub": 0.0,
+        "stock_qty": 0,
+        "delivery_days": 0,
+        "llm_confidence": 1.0,
+    }
+
+
+def _apply_label(fields: dict[str, object], label: str, value: str) -> None:
+    key = label.strip().lower()
+    value = value.strip()
+    if not value:
+        return
+    number = _first_number(value)
+    if "ядро" in key:
+        fields["core_arch"] = value
+    elif "flash" in key or "программ" in key or "флэш" in key or "флеш" in key:
+        fields["flash_kb"] = _memory_kb(value)
+    elif key.startswith("ram") or "озу" in key or "оператив" in key:
+        fields["ram_kb"] = _memory_kb(value)
+    elif "частот" in key:
+        fields["freq_mhz"] = float(number or 0)
+    elif "корпус" in key:
+        fields["package"] = value
+    elif "вывод" in key:
+        fields["pins_count"] = int(number or 0)
+    elif "налич" in key:
+        fields["stock_qty"] = int(number or 0)
+    elif key.startswith("цен") or key == "цена":
+        if value.casefold().startswith("от"):
+            return
+        fields["price_rub"] = float(number or 0)
+
+
+@lru_cache(maxsize=1)
+def load_extract_selectors() -> dict[str, Any]:
+    if not SELECTORS_PATH.is_file():
+        return {"our_parts": [], "sites": {}}
+    payload = json.loads(SELECTORS_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {"our_parts": [], "sites": {}}
+    return payload
+
+
+def _our_parts(config: dict[str, Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for part in config.get("our_parts") or []:
+        text = str(part).strip()
+        if text:
+            mapping[text.casefold()] = text
+    return mapping
+
+
+def _find_our_part(text: str, our: dict[str, str]) -> str | None:
+    folded = text.casefold()
+    hits = [orig for key, orig in our.items() if key in folded]
+    hits.sort(key=len, reverse=True)
+    return hits[0] if hits else None
+
+
+def _detect_site(html: str, config: dict[str, Any]) -> str | None:
+    window = html[:12_000].casefold()
+    for name in config.get("sites") or {}:
+        if str(name).casefold() in window:
+            return str(name)
+    return None
+
+
+def _select(node: Tag, selector: str) -> list[Tag]:
+    if not selector:
+        return []
+    found: list[Tag] = []
+    for chunk in selector.split(","):
+        css = chunk.strip()
+        if not css:
+            continue
+        found.extend(item for item in node.select(css) if isinstance(item, Tag))
+    return found
+
+
+def _first_select(node: Tag, selector: str) -> Tag | None:
+    items = _select(node, selector)
+    return items[0] if items else None
+
+
+def _fill_direct_fields(fields: dict[str, object], node: Tag, profile: dict[str, Any]) -> None:
+    mapping = (
+        ("core", "core_arch", str),
+        ("flash", "flash_kb", "kb"),
+        ("ram", "ram_kb", "kb"),
+        ("freq", "freq_mhz", float),
+        ("package", "package", str),
+        ("price", "price_rub", float),
+        ("stock", "stock_qty", int),
+    )
+    for key, field, kind in mapping:
+        selector = str(profile.get(key) or "")
+        if not selector:
+            continue
+        text = _visible(_first_select(node, selector))
+        if not text:
+            continue
+        if field == "price_rub" and text.casefold().startswith("от"):
+            continue
+        number = _first_number(text)
+        if kind == str:
+            fields[field] = text
+        elif kind == "kb":
+            fields[field] = _memory_kb(text)
+        elif kind is float:
+            fields[field] = float(number or 0)
+        else:
+            fields[field] = int(number or 0)
+
+
+def _fill_param_rows(fields: dict[str, object], node: Tag, profile: dict[str, Any]) -> None:
+    row_sel = str(profile.get("param_row") or "")
+    if not row_sel:
+        return
+    cell_sel = str(profile.get("param_cells") or "")
+    for row in _select(node, row_sel):
+        if cell_sel:
+            cells = _select(row, cell_sel)
+        else:
+            cells = [child for child in row.find_all(["td", "th", "div"], recursive=False) if isinstance(child, Tag)]
+            if len(cells) < 2:
+                cells = [child for child in row.find_all(["td", "th"]) if isinstance(child, Tag)]
+        if len(cells) >= 2:
+            _apply_label(fields, _visible(cells[0]), _visible(cells[1]))
+
+
+def _fill_labeled_stock(fields: dict[str, object], node: Tag, profile: dict[str, Any]) -> None:
+    label_sel = str(profile.get("stock_label") or "")
+    value_sel = str(profile.get("stock_value") or "")
+    want = str(profile.get("stock_name") or "наличие").casefold()
+    if not label_sel or not value_sel:
+        return
+    labels = _select(node, label_sel)
+    values = _select(node, value_sel)
+    for label_node, value_node in zip(labels, values):
+        if want in _visible(label_node).casefold():
+            number = _first_number(_visible(value_node))
+            if number is not None:
+                fields["stock_qty"] = int(number)
+            return
+
+
+def _spec_from_fields(fields: dict[str, object], part: str) -> MCUExtractSpec | None:
+    payload = dict(fields)
+    payload["part_number"] = part
+    spec = MCUExtractSpec.model_validate(payload)
+    if spec.part_number == "unknown":
+        return None
+    return spec
+
+
+def _extract_listing(
+    soup: BeautifulSoup,
+    profile: dict[str, Any],
+    our: dict[str, str],
+) -> list[MCUExtractSpec]:
+    specs: list[MCUExtractSpec] = []
+    seen: set[str] = set()
+    for item in _select(soup, str(profile.get("item") or "")):
+        part_node = _first_select(item, str(profile.get("part") or ""))
+        part = _find_our_part(_visible(part_node or item), our)
+        if part is None or part in seen:
+            continue
+        fields = _empty_fields()
+        _fill_direct_fields(fields, item, profile)
+        _fill_param_rows(fields, item, profile)
+        _fill_labeled_stock(fields, item, profile)
+        spec = _spec_from_fields(fields, part)
+        if spec is None:
+            continue
+        seen.add(part)
+        specs.append(spec)
+    return specs
+
+
+def _extract_product(
+    soup: BeautifulSoup,
+    profile: dict[str, Any],
+    our: dict[str, str],
+) -> list[MCUExtractSpec]:
+    part_node = _first_select(soup, str(profile.get("part") or "h1"))
+    part = _find_our_part(_visible(part_node) or _visible(soup.body if isinstance(soup.body, Tag) else None), our)
+    if part is None:
+        return []
+    fields = _empty_fields()
+    scope = soup
+    instock = soup.select_one(".warehouse-instock")
+    if isinstance(instock, Tag):
+        _fill_direct_fields(fields, instock, profile)
+        scope = soup
+    _fill_direct_fields(fields, soup, profile)
+    _fill_param_rows(fields, scope, profile)
+    spec = _spec_from_fields(fields, part)
+    return [] if spec is None else [spec]
+
+
+def extract_by_selectors(html: str, site: str | None = None) -> list[MCUExtractSpec]:
+    """Parse live competitor pages using CSS selectors from extract_selectors.json."""
+    config = load_extract_selectors()
+    our = _our_parts(config)
+    if not our:
+        return []
+    name = site or _detect_site(html, config)
+    sites = config.get("sites") or {}
+    profile_set = sites.get(name or "") if name else None
+    if not isinstance(profile_set, dict):
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    listing = profile_set.get("listing")
+    if isinstance(listing, dict):
+        specs = _extract_listing(soup, listing, our)
+        if specs:
+            return specs
+    product = profile_set.get("product")
+    if isinstance(product, dict):
+        return _extract_product(soup, product, our)
+    return []
+
+
 def extract_by_rules(html: str) -> list[MCUExtractSpec]:
     """Deterministic fallback for article-based catalogs (OUR fixture)."""
     specs: list[MCUExtractSpec] = []
@@ -351,6 +605,7 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
             "package": "unknown",
             "pins_count": 0,
             "price_rub": 0.0,
+            "stock_qty": 0,
             "delivery_days": 0,
             "llm_confidence": 1.0,
         }
@@ -375,6 +630,8 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
                 fields["package"] = value or "unknown"
             elif "вывод" in key:
                 fields["pins_count"] = int(number or 0)
+            elif "налич" in key:
+                fields["stock_qty"] = int(number or 0)
             elif "цен" in key:
                 fields["price_rub"] = float(number or 0)
             elif "постав" in key or "дней" in key:
@@ -389,10 +646,13 @@ def extract_specs_many(
     html: str,
     extractor: SpecExtractor | None = None,
 ) -> list[MCUExtractSpec]:
-    """Rules first; LLM extract if the page is not an article catalog."""
+    """Articles first, then live-page selectors, then LLM."""
     ruled = extract_by_rules(html)
     if ruled:
         return ruled
+    selected = extract_by_selectors(html)
+    if selected:
+        return selected
     spec = (extractor or SpecExtractor()).extract_specs(html)
     if spec.part_number == "unknown":
         return []

@@ -1,0 +1,40 @@
+{
+  "cards": [
+    {
+      "competitor": "ЧипДип",
+      "part_number": "STM32F103C8T6",
+      "url": "https://www.chipdip.ru/catalog/popular/stm32f103",
+      "note": "Строка листинга STM32F103: прямая карточка не открылась (таймаут). RAM на строке нет. Наличие 3646 шт."
+    },
+    {
+      "competitor": "ЧипДип",
+      "part_number": "STM32F411CEU6",
+      "url": "https://www.chipdip.ru/product/stm32f411ceu6-mikrokontroller-32-bit-st-microelectronics-9000372706",
+      "note": "Карточка 9000372706. Наличие 509 шт, Москва."
+    },
+    {
+      "competitor": "Платан",
+      "part_number": "STM32F103C8T6",
+      "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2015361529",
+      "note": "Карточка id=2015361529. Наличие 1613 шт."
+    },
+    {
+      "competitor": "Платан",
+      "part_number": "STM32F411CEU6",
+      "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2011485871",
+      "note": "Карточка id=2011485871. В таблице нет частоты и RAM. Наличие 1348 шт."
+    },
+    {
+      "competitor": "Промэлектроника",
+      "part_number": "STM32F103C8T6",
+      "url": "https://www.promelec.ru/product/126937/",
+      "note": "Цена от 1 шт на складе «в наличии». Наличие 31542 шт."
+    },
+    {
+      "competitor": "Промэлектроника",
+      "part_number": "STM32F411CEU6",
+      "url": "https://www.promelec.ru/product/159744/",
+      "note": "Цена от 1 шт на складе «в наличии». В таблице нет RAM. Наличие 1348 шт."
+    }
+  ]
+}

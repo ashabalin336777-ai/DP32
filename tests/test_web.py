@@ -17,6 +17,11 @@ def test_demo_page_renders() -> None:
     assert "STM32F411CEU6" in html
     assert 'name="part"' in html
     assert "Эталон OUR" in html
+    assert "ЧипДип" in html
+    assert "Промэлектроника" in html
+    assert "https://www.promelec.ru/product/126937/" in html
+    assert "3646 шт" in html
+    assert "Наличие" in html
 
 
 def test_safe_report_path_blocks_traversal() -> None:
@@ -52,5 +57,7 @@ def test_find_part_unknown() -> None:
 
 def test_demo_search_renders_hits() -> None:
     html = render_demo_html("STM32F411CEU6")
-    assert "Найдено по запросу" in html
-    assert "OUR" in html
+    assert "Поиск" in html
+    assert "ЧипДип" in html
+    assert "Платан" in html
+    assert "Промэлектроника" in html

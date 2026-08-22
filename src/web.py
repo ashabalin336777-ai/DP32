@@ -19,6 +19,7 @@ if str(_ROOT) not in sys.path:
 from src.config import ROOT, get_settings  # noqa: E402
 from src.db import load_latest_report, load_latest_snapshot  # noqa: E402
 from src.extractor import extract_by_rules  # noqa: E402
+from src.price_compare import compare_part_prices, competitor_tables  # noqa: E402
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 ALLOWED_REPORT_SUFFIXES = {".pdf", ".html"}
@@ -130,6 +131,8 @@ def build_demo_context(query_part: str = "") -> dict[str, object]:
         "our_parts": our_parts,
         "query_part": query,
         "query_hits": find_part_rows(query, our_parts, snap_records),
+        "price_compare": compare_part_prices(query) if query else None,
+        "competitor_tables": competitor_tables(),
     }
 
 

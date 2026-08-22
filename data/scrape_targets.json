@@ -3,22 +3,48 @@
     {
       "competitor": "ЧипДип",
       "slug": "chipdip",
-      "url": "data/chipdip_catalog.html"
+      "url": "https://www.chipdip.ru/catalog/popular/stm32f103",
+      "fixture": "data/chipdip_catalog.html",
+      "ready_selector": ".item, .catalog-item, table"
+    },
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "url": "https://www.chipdip.ru/product/stm32f411ceu6-mikrokontroller-32-bit-st-microelectronics-9000372706",
+      "fixture": "data/chipdip_catalog.html",
+      "ready_selector": "h1, .product, table"
     },
     {
       "competitor": "Платан",
       "slug": "platan",
-      "url": "data/platan_catalog.html"
+      "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2015361529",
+      "fixture": "data/platan_catalog.html"
+    },
+    {
+      "competitor": "Платан",
+      "slug": "platan",
+      "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2011485871",
+      "fixture": "data/platan_catalog.html"
     },
     {
       "competitor": "Промэлектроника",
       "slug": "promelec",
-      "url": "data/promelec_catalog.html"
+      "url": "https://www.promelec.ru/product/126937/",
+      "fixture": "data/promelec_catalog.html",
+      "ready_selector": "h1, .table-list, .product-preview__title"
+    },
+    {
+      "competitor": "Промэлектроника",
+      "slug": "promelec",
+      "url": "https://www.promelec.ru/product/159744/",
+      "fixture": "data/promelec_catalog.html",
+      "ready_selector": "h1, .table-list, .product-preview__title"
     },
     {
       "competitor": "OUR",
       "slug": "our",
-      "url": "data/our_catalog.html"
+      "url": "data/our_catalog.html",
+      "fixture": "data/our_catalog.html"
     }
   ]
 }

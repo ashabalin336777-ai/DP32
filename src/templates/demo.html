@@ -49,6 +49,9 @@
       font: inherit;
       cursor: pointer;
     }
+    .win { color: #0d7a3e; font-weight: 600; }
+    .lose { color: #b42318; font-weight: 600; }
+    .muted { color: #5b6570; }
     iframe { width: 100%; min-height: 640px; border: 1px solid #d7dde3; border-radius: 8px; background: #fff; }
     footer { color: #5b6570; font-size: 13px; }
   </style>
@@ -103,40 +106,102 @@
         <input id="part" name="part" type="text" value="{{ query_part }}" placeholder="STM32F103C8T6" autocomplete="off">
         <button type="submit">Найти</button>
       </form>
-      {% if query_part %}
-        {% if query_hits %}
-        <p>Найдено по запросу <code>{{ query_part }}</code>:</p>
+      {% if price_compare %}
+        <p>Поиск <code>{{ price_compare.query }}</code> у ЧипДип, Платана и Промэлектроники. Дельты считает Pandas: (OUR − конкурент) / конкурент.</p>
+        {% if price_compare.our %}
+        <p>Эталон OUR: <b>{{ price_compare.our.part_number }}</b> — {{ price_compare.our.price_rub }} ₽.</p>
+        {% else %}
+        <p>Этого артикула нет в эталоне OUR — сравниваю только цены конкурентов.</p>
+        {% endif %}
+        {% if price_compare.cheapest_name %}
+        <p>Самая низкая цена: <b>{{ price_compare.cheapest_name }}</b> — {{ price_compare.cheapest_price }} ₽.</p>
+        {% endif %}
         <table>
           <thead>
             <tr>
-              <th>Источник</th>
-              <th>Артикул</th>
-              <th>Ядро</th>
-              <th>Flash</th>
-              <th>RAM</th>
-              <th>Частота</th>
+              <th>Конкурент</th>
               <th>Цена</th>
+              <th>OUR vs конкурент</th>
+              <th>Вывод</th>
+              <th>Наличие</th>
+              <th>Карточка</th>
             </tr>
           </thead>
           <tbody>
-            {% for row in query_hits %}
+            {% for row in price_compare.rows %}
             <tr>
               <td>{{ row.competitor_name }}</td>
-              <td>{{ row.part_number }}</td>
-              <td>{{ row.core_arch }}</td>
-              <td>{{ row.flash_kb }} KB</td>
-              <td>{{ row.ram_kb }} KB</td>
-              <td>{{ row.freq_mhz }} MHz</td>
-              <td>{{ row.price_rub }} ₽</td>
+              <td>{% if row.found and row.price_rub is not none %}{{ row.price_rub }} ₽{% else %}—{% endif %}</td>
+              <td>
+                {% if row.price_delta_pct is not none %}
+                  {{ row.price_delta_pct }}%
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="{% if row.found and row.price_delta_pct is not none and row.price_delta_pct > 0 %}lose{% elif row.found and row.price_delta_pct is not none and row.price_delta_pct < 0 %}win{% else %}muted{% endif %}">
+                {{ row.verdict }}
+              </td>
+              <td>{% if row.stock_qty %}{{ row.stock_qty }} шт{% else %}—{% endif %}</td>
+              <td>
+                {% if row.source_url %}
+                <a href="{{ row.source_url }}" rel="noopener noreferrer">открыть</a>
+                {% else %}—{% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        {% else %}
-        <p>По запросу <code>{{ query_part }}</code> нет совпадений в эталоне и в последнем срезе.</p>
+        {% if price_compare.found_competitors == 0 %}
+        <p>Артикул не найден в снятых карточках трёх конкурентов.</p>
         {% endif %}
       {% endif %}
     </section>
+
+    {% for table in competitor_tables %}
+    <section>
+      <h2>{{ table.competitor }}</h2>
+      {% if table.rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>Артикул</th>
+            <th>Источник</th>
+            <th>Ядро</th>
+            <th>Flash</th>
+            <th>RAM</th>
+            <th>Частота</th>
+            <th>Корпус</th>
+            <th>Цена от 1 шт</th>
+            <th>Наличие</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in table.rows %}
+          <tr>
+            <td>{{ row.part_number }}</td>
+            <td>
+              {% if row.source_url %}
+              <a href="{{ row.source_url }}" rel="noopener noreferrer">карточка</a>
+              {% else %}—{% endif %}
+              {% if row.source_note %}<div class="muted">{{ row.source_note }}</div>{% endif %}
+            </td>
+            <td>{{ row.core_arch }}</td>
+            <td>{% if row.flash_kb %}{{ row.flash_kb }} KB{% else %}—{% endif %}</td>
+            <td>{% if row.ram_kb %}{{ row.ram_kb }} KB{% else %}—{% endif %}</td>
+            <td>{% if row.freq_mhz %}{{ row.freq_mhz }} MHz{% else %}—{% endif %}</td>
+            <td>{{ row.package or "—" }}</td>
+            <td>{% if row.price_rub %}{{ row.price_rub }} ₽{% else %}—{% endif %}</td>
+            <td>{% if row.stock_qty %}{{ row.stock_qty }} шт{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>Карточек нет.</p>
+      {% endif %}
+    </section>
+    {% endfor %}
 
     <section>
       <h2>Последний отчёт</h2>

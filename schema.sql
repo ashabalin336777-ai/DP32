@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS mcu_data (
     pins_count INTEGER,
     price_rub REAL,
     stock_status TEXT,
+    stock_qty INTEGER,
     delivery_days INTEGER,
     scraped_at TEXT NOT NULL,
     source_url TEXT,

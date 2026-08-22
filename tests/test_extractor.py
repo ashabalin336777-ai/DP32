@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import diskcache
 
 from src.extractor import (
     MCUExtractSpec,
     SpecExtractor,
     extract_by_rules,
+    extract_by_selectors,
     extract_specs_many,
 )
 
@@ -79,6 +82,7 @@ def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
     assert f103.package == "LQFP-48"
     assert f103.pins_count == 48
     assert f103.price_rub == 150
+    assert f103.stock_qty == 1613
     f411 = parts["STM32F411CEU6"]
     assert f411.core_arch == "ARM Cortex M4"
     assert f411.flash_kb == 512
@@ -86,6 +90,7 @@ def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
     assert f411.freq_mhz == 0
     assert f411.package == "UFQFPN-48"
     assert f411.price_rub == 473.77
+    assert f411.stock_qty == 1348
 
 
 def test_extract_by_rules_chipdip_catalog(chipdip_catalog_html: str) -> None:
@@ -98,11 +103,13 @@ def test_extract_by_rules_chipdip_catalog(chipdip_catalog_html: str) -> None:
     assert f103.ram_kb == 0
     assert f103.freq_mhz == 72
     assert f103.price_rub == 160
+    assert f103.stock_qty == 3646
     f411 = parts["STM32F411CEU6"]
     assert f411.flash_kb == 512
     assert f411.ram_kb == 128
     assert f411.freq_mhz == 100
     assert f411.price_rub == 450
+    assert f411.stock_qty == 509
 
 
 def test_extract_by_rules_promelec_catalog(promelec_catalog_html: str) -> None:
@@ -115,12 +122,14 @@ def test_extract_by_rules_promelec_catalog(promelec_catalog_html: str) -> None:
     assert f103.ram_kb == 20
     assert f103.freq_mhz == 72
     assert f103.price_rub == 175.04
+    assert f103.stock_qty == 31542
     f411 = parts["STM32F411CEU6"]
     assert f411.core_arch == "ARM Cortex-M4"
     assert f411.flash_kb == 512
     assert f411.ram_kb == 0
     assert f411.freq_mhz == 100
     assert f411.price_rub == 468.93
+    assert f411.stock_qty == 1348
 
 
 def test_extract_specs_many_prefers_rules(our_catalog_html: str) -> None:
@@ -138,3 +147,64 @@ def test_extract_specs_many_skips_unknown_llm() -> None:
             return MCUExtractSpec()
 
     assert extract_specs_many("<html><p>catalog listing</p></html>", extractor=Dummy()) == []
+
+
+def test_extract_chipdip_listing_row_not_neighbor() -> None:
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "chipdip_listing_f103.html"
+    ).read_text(encoding="utf-8")
+    specs = extract_by_selectors(html)
+    parts = {item.part_number: item for item in specs}
+    assert set(parts) == {"STM32F103C8T6"}
+    f103 = parts["STM32F103C8T6"]
+    assert f103.core_arch == "Cortex-M3"
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 0
+    assert f103.freq_mhz == 72
+    assert f103.package == "LQFP-48"
+    assert f103.price_rub == 160
+    assert f103.stock_qty == 3646
+
+
+def test_extract_promelec_product_in_stock_price() -> None:
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "promelec_product_f103.html"
+    ).read_text(encoding="utf-8")
+    specs = extract_by_selectors(html)
+    assert len(specs) == 1
+    f103 = specs[0]
+    assert f103.part_number == "STM32F103C8T6"
+    assert f103.core_arch == "ARM Cortex-M3"
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 20
+    assert f103.freq_mhz == 72
+    assert f103.package == "LQFP48"
+    assert f103.price_rub == 175.04
+    assert f103.stock_qty == 31542
+
+
+def test_extract_promelec_listing_skips_from_price() -> None:
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "promelec_listing_f103.html"
+    ).read_text(encoding="utf-8")
+    specs = extract_by_selectors(html)
+    assert len(specs) == 1
+    f103 = specs[0]
+    assert f103.part_number == "STM32F103C8T6"
+    assert f103.stock_qty == 31542
+    assert f103.flash_kb == 64
+    assert f103.ram_kb == 20
+    assert f103.price_rub == 0
+
+
+def test_extract_specs_many_uses_selectors_without_articles() -> None:
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "chipdip_listing_f103.html"
+    ).read_text(encoding="utf-8")
+
+    class Boom:
+        def extract_specs(self, html: str) -> MCUExtractSpec:
+            raise AssertionError("LLM must not run when selectors match")
+
+    specs = extract_specs_many(html, extractor=Boom())  # type: ignore[arg-type]
+    assert specs[0].stock_qty == 3646

@@ -49,28 +49,18 @@ class Settings:
     web_port: int
     price_adv_threshold: float
     price_dis_threshold: float
-    tavily_api_key: str = ""
-    tavily_extract_url: str = ""
-    scrape_fallback: str = "tavily"
     confidence_review_threshold: float = CONFIDENCE_REVIEW_THRESHOLD
     llm_max_retries: int = LLM_MAX_RETRIES
     connect_timeout_sec: float = CONNECT_TIMEOUT_SEC
     html_window_chars: int = HTML_WINDOW_CHARS
+    scrape_warmup_delay_sec: float = 2.5
+    scrape_403_backoff_sec: float = 8.0
+    scrape_cache_ttl_sec: int = 86400
 
     @property
     def has_api_key(self) -> bool:
         key = self.neural_deep_api_key.strip()
         return bool(key) and key != "your_token_here"
-
-    @property
-    def has_tavily_key(self) -> bool:
-        key = self.tavily_api_key.strip()
-        return bool(key) and key not in {"your_token_here", "your_tavily_api_key_here"}
-
-    @property
-    def tavily_fallback_enabled(self) -> bool:
-        mode = (self.scrape_fallback or "tavily").strip().lower()
-        return mode == "tavily" and self.has_tavily_key
 
 
 @lru_cache(maxsize=1)
@@ -86,8 +76,11 @@ def get_settings() -> Settings:
         report_dir=_as_path(os.getenv("REPORT_DIR", ""), "reports"),
         log_dir=_as_path(os.getenv("LOG_DIR", ""), "logs"),
         cache_dir=_as_path(os.getenv("CACHE_DIR", ""), ".cache"),
-        scrape_delay_sec=float(os.getenv("SCRAPE_DELAY_SEC", "1.5")),
-        scrape_timeout_ms=int(os.getenv("SCRAPE_TIMEOUT_MS", "45000")),
+        scrape_delay_sec=float(os.getenv("SCRAPE_DELAY_SEC", "5")),
+        scrape_timeout_ms=int(os.getenv("SCRAPE_TIMEOUT_MS", "120000")),
+        scrape_warmup_delay_sec=float(os.getenv("SCRAPE_WARMUP_DELAY_SEC", "2.5")),
+        scrape_403_backoff_sec=float(os.getenv("SCRAPE_403_BACKOFF_SEC", "8")),
+        scrape_cache_ttl_sec=int(os.getenv("SCRAPE_CACHE_TTL_SEC", "86400")),
         scrape_targets_path=_as_path(
             os.getenv("SCRAPE_TARGETS_PATH", ""), "data/scrape_targets.json"
         ),
@@ -101,11 +94,6 @@ def get_settings() -> Settings:
         web_port=int(os.getenv("WEB_PORT", "8080")),
         price_adv_threshold=float(os.getenv("PRICE_ADV_THRESHOLD", "5.0")),
         price_dis_threshold=float(os.getenv("PRICE_DIS_THRESHOLD", "5.0")),
-        tavily_api_key=os.getenv("TAVILY_API_KEY", ""),
-        tavily_extract_url=os.getenv(
-            "TAVILY_EXTRACT_URL", "https://api.tavily.com/extract"
-        ),
-        scrape_fallback=os.getenv("SCRAPE_FALLBACK", "tavily"),
     )
     ensure_runtime_dirs(settings)
     return settings
@@ -117,6 +105,7 @@ def ensure_runtime_dirs(settings: Settings | None = None) -> None:
         cfg.report_dir,
         cfg.log_dir,
         cfg.cache_dir / "extract_specs",
+        cfg.cache_dir / "html_pages",
         cfg.db_path.parent,
         cfg.raw_dir,
     ):
