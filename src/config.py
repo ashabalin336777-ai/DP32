@@ -56,11 +56,26 @@ class Settings:
     scrape_warmup_delay_sec: float = 2.5
     scrape_403_backoff_sec: float = 8.0
     scrape_cache_ttl_sec: int = 86400
+    search_web_enabled: bool = True
+    search_web_limit: int = 5
+    search_web_url: str = ""
+    search_web_query: str = "{part} {competitor} купить микроконтроллер"
 
     @property
     def has_api_key(self) -> bool:
         key = self.neural_deep_api_key.strip()
         return bool(key) and key != "your_token_here"
+
+    @property
+    def resolved_search_web_url(self) -> str:
+        override = self.search_web_url.strip()
+        if override:
+            return override
+        return self.neural_deep_base_url.rstrip("/") + "/search/web"
+
+    @property
+    def search_web_ready(self) -> bool:
+        return self.search_web_enabled and self.has_api_key
 
 
 @lru_cache(maxsize=1)
@@ -94,6 +109,14 @@ def get_settings() -> Settings:
         web_port=int(os.getenv("WEB_PORT", "8080")),
         price_adv_threshold=float(os.getenv("PRICE_ADV_THRESHOLD", "5.0")),
         price_dis_threshold=float(os.getenv("PRICE_DIS_THRESHOLD", "5.0")),
+        search_web_enabled=os.getenv("SEARCH_WEB", "on").strip().lower()
+        not in {"0", "off", "false", "no"},
+        search_web_limit=int(os.getenv("SEARCH_WEB_LIMIT", "5")),
+        search_web_url=os.getenv("NEURAL_DEEP_SEARCH_WEB_URL", ""),
+        search_web_query=os.getenv(
+            "SEARCH_WEB_QUERY",
+            "{part} {competitor} купить микроконтроллер",
+        ),
     )
     ensure_runtime_dirs(settings)
     return settings

@@ -21,7 +21,7 @@ playwright install chromium
 copy .env.example .env
 ```
 
-В `.env` укажите `NEURAL_DEEP_API_KEY`. Ключи в git не попадают.
+В `.env` укажите `NEURAL_DEEP_API_KEY` — тот же ключ для чата и `search:web`. Ключи в git не попадают. `SEARCH_WEB=off` отключает поиск URL, остаются цели из `data/scrape_targets.json`.
 
 ```powershell
 python src/pipeline.py
@@ -35,12 +35,13 @@ python src/web.py
 
 `python src/pipeline.py` — одна команда:
 
-1. Playwright → HTML в `data/raw/` (403 — пауза и один повтор; timeout — HTML-кэш; иначе skip)
-2. Агент 1 / правила → SQLite (`upsert_mcu_specs`)
-3. Последний срез `load_latest_snapshot`
-4. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
-5. Дельты `(our - comp) / comp` для цены, Flash, RAM (порог 5%)
-6. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
+1. Neural Deep `search:web` → URL карточек по артикулам OUR и хостам конкурентов
+2. Playwright → HTML в `data/raw/` (403 — пауза и один повтор; timeout — HTML-кэш; иначе skip)
+3. Парсеры + Агент 1 → SQLite (`upsert_mcu_specs`)
+4. Последний срез `load_latest_snapshot`
+5. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
+6. Дельты `(our - comp) / comp` для цены, Flash, RAM (порог 5%)
+7. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
 
 Логи: `logs/pipeline.log`, `logs/llm_calls.log`, `logs/alerts.log`. Падение URL в Playwright не останавливает прогон. Retry LLM ≤ 3, затем правила.
 
@@ -50,8 +51,9 @@ python src/web.py
 
 | Модуль | Назначение |
 |--------|------------|
-| `src/scraper.py` | каталоги ЧипДип / Платан / Промэлектроника / OUR |
-| `src/extractor.py` | HTML → `MCUExtractSpec` |
+| `src/web_search.py` | Neural Deep `search:web` → URL карточек |
+| `src/scraper.py` | Playwright: HTML в `data/raw/` |
+| `src/extractor.py` | селекторы + LLM → `MCUExtractSpec` |
 | `src/db.py` | SQLite WAL, без ORM |
 | `src/matcher.py` | аналоги и дельты |
 | `src/analyzer.py` | отчёт + VALID/INVALID |
@@ -60,7 +62,7 @@ python src/web.py
 | `src/web.py` | демо-сайт отчётов |
 | `src/scheduler.py` | опциональный cron в контейнере |
 
-URL целей — в `data/scrape_targets.json` (живые страницы + поле `fixture` для офлайна). Локальные каталоги: `data/our_catalog.html`, `data/platan_catalog.html`, `data/chipdip_catalog.html`, `data/promelec_catalog.html`. Селекторы живых страниц: `data/extract_selectors.json`. На 403 — пауза и один повтор; на timeout — HTML-кэш в `.cache/html_pages`.
+Гибрид: `search:web` (тот же `NEURAL_DEEP_API_KEY`, `POST {base}/search/web`) находит URL, Playwright качает HTML, парсеры/LLM извлекают поля, Pandas+KNN сравнивают, аналитик пишет отчёт. Без ключа или при `SEARCH_WEB=off` остаются URL из `data/scrape_targets.json`. Хосты конкурентов берутся из этих целей, не из кода. Селекторы: `data/extract_selectors.json`.
 
 Пустой HTML → `0` / `"unknown"` и `llm_confidence < 0.5`. Ниже 0.8 → `needs_review`.
 
@@ -74,7 +76,7 @@ URL целей — в `data/scrape_targets.json` (живые страницы + 
 pytest
 ```
 
-Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, демо-страница и скрейпер (мок заголовков, 403, кэш). Живой LLM и сеть не требуются.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, демо-страница, скрейпер (мок заголовков, 403, кэш) и `search:web` (мок HTTP). Живой LLM и сеть не требуются.
 
 ## Деплой на Timeweb VPS
 
@@ -89,7 +91,44 @@ pytest
 
 Второй nginx на хост не ставить: 80/443 уже заняты.
 
-### Контейнеры
+### Обновление этого этапа (гибрид search:web)
+
+На сервере, по шагам. `.env` не коммитится — ключ не перезаписывать из примера.
+
+```bash
+# 1) Репозиторий
+cd /opt/dp32
+git status
+git checkout -- docker-compose.yml
+git pull --ff-only origin main
+
+# 2) Ключ и флаги поиска (один раз или проверить)
+test -f .env || cp .env.example .env
+grep -E '^(NEURAL_DEEP_API_KEY|SEARCH_WEB)=' .env
+# если ключа нет: вписать NEURAL_DEEP_API_KEY=sk-...
+# SEARCH_WEB=on  — искать URL через Neural Deep
+# SEARCH_WEB=off — только scrape_targets.json
+
+# 3) Образ и контейнеры
+docker compose up -d --build
+
+# 4) Сеть SHA Studio (force-recreate её сбрасывает)
+docker network connect shastudio_default mcu-analyzer-web 2>/dev/null || true
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' mcu-analyzer-web
+
+# 5) Веб жив
+curl -sS http://127.0.0.1:8082/healthz
+
+# 6) Гибридный прогон: search:web → Playwright → extract → SQLite → KNN → отчёт
+docker compose run --rm analyzer python src/pipeline.py
+
+# 7) Публичная страница
+curl -sS -o /dev/null -w '%{http_code}\n' https://dp32.shastudio.ru/
+```
+
+Проверка поиска в логе: `docker compose run --rm analyzer grep search:web /app/logs/pipeline.log | tail`. Если ключа нет, будет `search:web off — using scrape_targets.json`.
+
+### Первый запуск контейнеров
 
 ```bash
 cd /opt/dp32
