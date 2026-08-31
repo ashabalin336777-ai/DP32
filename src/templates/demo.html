@@ -4,242 +4,374 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DP32 — конкурентный анализ 32-бит МК</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root { color-scheme: light; }
+    :root {
+      --ink: #1a2330;
+      --muted: #5c6774;
+      --line: #c9d3dc;
+      --paper: #f3f6f8;
+      --panel: #ffffff;
+      --our: #1f4e62;
+      --our-soft: #e4eef2;
+      --win: #0d7a3e;
+      --lose: #b42318;
+      --accent: #c45c26;
+      --grid: rgba(31, 78, 98, 0.06);
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", "DejaVu Sans", Arial, sans-serif;
-      background: #f4f6f8;
-      color: #1c2430;
+      font-family: "IBM Plex Sans", "DejaVu Sans", sans-serif;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(180deg, #e8eef2 0, transparent 220px),
+        repeating-linear-gradient(0deg, transparent, transparent 23px, var(--grid) 24px),
+        repeating-linear-gradient(90deg, transparent, transparent 23px, var(--grid) 24px);
       line-height: 1.5;
     }
-    header, main, footer { max-width: 960px; margin: 0 auto; padding: 20px 16px; }
-    header {
-      padding-top: 28px;
+    header, main, footer { max-width: 1120px; margin: 0 auto; padding: 20px 16px; }
+    header { padding-top: 36px; }
+    .brand {
+      font-family: "IBM Plex Serif", "Times New Roman", serif;
+      font-size: clamp(42px, 7vw, 64px);
+      letter-spacing: -0.03em;
+      margin: 0;
+      color: var(--our);
     }
-    h1 { margin: 0 0 6px; font-size: 28px; }
-    .lead { color: #5b6570; margin: 0 0 18px; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0 24px; }
-    .card { background: #fff; border: 1px solid #d7dde3; border-radius: 10px; padding: 14px; }
-    .card b { display: block; font-size: 22px; }
-    .card span { color: #5b6570; font-size: 13px; }
-    section { background: #fff; border: 1px solid #d7dde3; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
-    h2 { margin: 0 0 10px; font-size: 18px; }
-    ul { margin: 0; padding-left: 18px; }
-    a { color: #155eef; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #edf1f4; font-size: 14px; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #eef2f6; }
-    .actions a { display: inline-block; margin-right: 10px; margin-top: 8px; }
-    .lookup { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
-    .lookup input {
-      flex: 1 1 220px;
-      min-width: 180px;
-      padding: 8px 10px;
-      border: 1px solid #c5ced6;
-      border-radius: 8px;
+    .lead { color: var(--muted); margin: 6px 0 20px; max-width: 42rem; }
+    .lookup {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .lookup input, .filters select, .filters input {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
       font: inherit;
+      background: var(--panel);
     }
+    .lookup input { flex: 1 1 240px; min-width: 180px; }
     .lookup button {
-      padding: 8px 14px;
+      padding: 9px 16px;
       border: 0;
-      border-radius: 8px;
-      background: #155eef;
+      background: var(--our);
       color: #fff;
       font: inherit;
       cursor: pointer;
     }
-    .win { color: #0d7a3e; font-weight: 600; }
-    .lose { color: #b42318; font-weight: 600; }
-    .muted { color: #5b6570; }
-    iframe { width: 100%; min-height: 640px; border: 1px solid #d7dde3; border-radius: 8px; background: #fff; }
-    footer { color: #5b6570; font-size: 13px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0 0 28px; }
+    .kpi { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; }
+    .kpi b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+    .kpi span { color: var(--muted); font-size: 13px; }
+    section { background: var(--panel); border: 1px solid var(--line); padding: 18px 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 18px; font-family: "IBM Plex Serif", serif; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .filters label { font-size: 13px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #edf1f4; font-size: 14px; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .matrix-wrap { overflow-x: auto; }
+    .matrix th:first-child, .matrix td:first-child {
+      position: sticky;
+      left: 0;
+      background: var(--panel);
+      z-index: 1;
+      min-width: 7rem;
+    }
+    .matrix th.our, .matrix td.our { background: var(--our-soft); font-weight: 600; color: var(--our); }
+    .matrix th.our { position: sticky; left: 7rem; z-index: 2; }
+    tr.is-etalon td { background: var(--our-soft); }
+    .win { color: var(--win); font-weight: 600; }
+    .lose { color: var(--lose); font-weight: 600; }
+    .muted { color: var(--muted); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-size: 12px; font-weight: 600; }
+    .badge-valid { background: #e5f6ea; color: #1f7a3a; }
+    .badge-invalid { background: #fdecea; color: var(--lose); }
+    .badge-draft { background: #eef2f6; color: #3d4a57; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-box { min-height: 280px; position: relative; }
+    a { color: var(--our); }
+    details { margin-top: 12px; }
+    iframe { width: 100%; min-height: 560px; border: 1px solid var(--line); background: #fff; }
+    footer { color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      .charts { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>DP32</h1>
+    <h1 class="brand">DP32</h1>
     <p class="lead">Дипломный проект УИИ: автоматический конкурентный анализ 32-битных микроконтроллеров. Цифры считает Pandas, выводы проверяются по фактам VALID/INVALID.</p>
+    <form class="lookup" method="get" action="/">
+      <label for="part">Поиск эталона OUR</label>
+      <input id="part" name="part" type="text" list="our-parts" value="{{ query_part }}" placeholder="STM32F103C8T6" autocomplete="off">
+      <datalist id="our-parts">
+        {% for item in our_parts %}
+        <option value="{{ item.part_number }}">{{ item.part_number }} · {{ item.price_rub }} ₽</option>
+        {% endfor %}
+      </datalist>
+      <button type="submit">Найти</button>
+    </form>
+    {% if query_part and our_etalon %}
+    <p>Эталон OUR задан поиском: <b>{{ our_etalon.part_number }}</b> — {{ our_etalon.price_rub }} ₽.</p>
+    {% elif query_part %}
+    <p class="muted">Артикул <code>{{ query_part }}</code> не найден в эталоне OUR. Сравнение идёт только по карточкам конкурентов.</p>
+    {% else %}
+    <p class="muted">Введите артикул из каталога OUR — он станет эталоном для матрицы и графиков.</p>
+    {% endif %}
+    <div class="kpis">
+      <div class="kpi"><b>{{ snapshot_rows }}</b><span>строк среза</span></div>
+      <div class="kpi"><b>{{ our_count }}</b><span>позиций OUR</span></div>
+      <div class="kpi"><b>{{ kpi_advantages }}</b><span>преимуществ</span></div>
+      <div class="kpi"><b>{{ kpi_disadvantages }}</b><span>недостатков</span></div>
+      <div class="kpi"><b>{{ latest.status if latest else "нет" }}</b><span>статус отчёта</span></div>
+    </div>
   </header>
   <main>
-    <div class="cards">
-      <div class="card"><b>{{ snapshot_rows }}</b><span>строк в последнем срезе</span></div>
-      <div class="card"><b>{{ our_count }}</b><span>позиций OUR</span></div>
-      <div class="card"><b>{{ reports|length }}</b><span>файлов отчётов</span></div>
-      <div class="card"><b>{{ latest.status if latest else "нет" }}</b><span>статус последнего отчёта</span></div>
-    </div>
-
-    <section>
-      <h2>Эталон OUR</h2>
-      {% if our_parts %}
+    {% if compare_matrix %}
+    <section id="compare">
+      <h2>Сравнение · {{ compare_matrix.part }}</h2>
+      <p class="muted">Результат поиска: цена и наличие по карточкам OUR / ЧипДип / Платан / Промэлектроника.</p>
+      {% if price_compare and price_compare.our %}
+      <p>Эталон OUR: <b>{{ price_compare.our.part_number }}</b> — {{ price_compare.our.price_rub }} ₽. Дельты считает Pandas: (OUR − конкурент) / конкурент.</p>
+      {% endif %}
+      {% if price_compare and price_compare.cheapest_name %}
+      <p>Самая низкая цена: <b>{{ price_compare.cheapest_name }}</b> — {{ price_compare.cheapest_price }} ₽.</p>
+      {% endif %}
+      <label class="muted"><input id="only-diff" type="checkbox"> только отличия</label>
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Параметр</th>
+              {% for col in compare_matrix.columns %}
+              <th class="{% if col == 'OUR' %}our{% endif %}">{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in compare_matrix.rows %}
+            <tr data-same="{{ 1 if row.same else 0 }}">
+              <td>{{ row.attr }}</td>
+              {% for col in compare_matrix.columns %}
+              <td class="{% if col == 'OUR' %}our{% endif %}">
+                {{ row.values[col] }}
+                {% if row.deltas.get(col) is not none %}
+                  {% set d = row.deltas.get(col) %}
+                  {% if row.higher_better %}
+                  <div class="{% if d > 0 %}win{% elif d < 0 %}lose{% else %}muted{% endif %}">Δ {{ d }}%</div>
+                  {% else %}
+                  <div class="{% if d > 0 %}lose{% elif d < 0 %}win{% else %}muted{% endif %}">Δ {{ d }}%</div>
+                  {% endif %}
+                {% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if price_compare %}
       <table>
         <thead>
           <tr>
-            <th>Артикул</th>
-            <th>Ядро</th>
-            <th>Flash</th>
-            <th>RAM</th>
-            <th>Частота</th>
-            <th>Корпус</th>
-            <th>Цена</th>
+            <th>Конкурент</th>
+            <th>Вывод по цене</th>
+            <th>Карточка</th>
           </tr>
         </thead>
         <tbody>
-          {% for item in our_parts %}
+          {% for row in price_compare.rows %}
           <tr>
-            <td>{{ item.part_number }}</td>
-            <td>{{ item.core_arch }}</td>
-            <td>{{ item.flash_kb }} KB</td>
-            <td>{{ item.ram_kb }} KB</td>
-            <td>{{ item.freq_mhz }} MHz</td>
-            <td>{{ item.package }}</td>
-            <td>{{ item.price_rub }} ₽</td>
+            <td>{{ row.competitor_name }}</td>
+            <td class="{% if row.found and row.price_delta_pct is not none and row.price_delta_pct > 0 %}lose{% elif row.found and row.price_delta_pct is not none and row.price_delta_pct < 0 %}win{% else %}muted{% endif %}">
+              {{ row.verdict }}
+            </td>
+            <td>
+              {% if row.source_url %}
+              <a href="{{ row.source_url }}" rel="noopener noreferrer">открыть</a>
+              {% else %}—{% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      {% else %}
-      <p>Эталонный каталог не найден.</p>
+      {% if price_compare.found_competitors == 0 %}
+      <p>Артикул не найден в снятых карточках трёх конкурентов.</p>
       {% endif %}
-      <form class="lookup" method="get" action="/">
-        <label for="part">Микроконтроллер</label>
-        <input id="part" name="part" type="text" value="{{ query_part }}" placeholder="STM32F103C8T6" autocomplete="off">
-        <button type="submit">Найти</button>
-      </form>
-      {% if price_compare %}
-        <p>Поиск <code>{{ price_compare.query }}</code> у ЧипДип, Платана и Промэлектроники. Дельты считает Pandas: (OUR − конкурент) / конкурент.</p>
-        {% if price_compare.our %}
-        <p>Эталон OUR: <b>{{ price_compare.our.part_number }}</b> — {{ price_compare.our.price_rub }} ₽.</p>
-        {% else %}
-        <p>Этого артикула нет в эталоне OUR — сравниваю только цены конкурентов.</p>
-        {% endif %}
-        {% if price_compare.cheapest_name %}
-        <p>Самая низкая цена: <b>{{ price_compare.cheapest_name }}</b> — {{ price_compare.cheapest_price }} ₽.</p>
-        {% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
+    <section id="catalog">
+      <h2>Каталог{% if query_part %} · {{ query_part }}{% endif %}</h2>
+      {% if query_part %}
+      <p class="muted">Только выбранный эталон и его карточки у конкурентов. Другие артикулы OUR скрыты.</p>
+      {% else %}
+      <p class="muted">Клик по артикулу OUR подставляет его в поиск как эталон. Фильтры работают в браузере, без нового API.</p>
+      {% endif %}
+      <div class="filters">
+        <label>Конкурент
+          <select id="filter-competitor">
+            <option value="">все</option>
+            <option value="OUR">OUR</option>
+            <option value="ЧипДип">ЧипДип</option>
+            <option value="Платан">Платан</option>
+            <option value="Промэлектроника">Промэлектроника</option>
+          </select>
+        </label>
+        <label>Корпус
+          <select id="filter-package">
+            <option value="">все</option>
+            {% for pkg in catalog_packages %}
+            <option value="{{ pkg }}">{{ pkg }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Flash от
+          <input id="filter-flash-min" type="number" min="0" placeholder="0" style="width:5.5rem">
+        </label>
+        <label>до KB
+          <input id="filter-flash-max" type="number" min="0" placeholder="∞" style="width:5.5rem">
+        </label>
+      </div>
+      {% if catalog_rows %}
+      <div class="matrix-wrap">
         <table>
           <thead>
             <tr>
-              <th>Конкурент</th>
+              <th>Источник</th>
+              <th>Артикул</th>
+              <th>Ядро</th>
+              <th>Flash</th>
+              <th>RAM</th>
+              <th>Частота</th>
+              <th>Корпус</th>
               <th>Цена</th>
-              <th>OUR vs конкурент</th>
-              <th>Вывод</th>
               <th>Наличие</th>
               <th>Карточка</th>
             </tr>
           </thead>
           <tbody>
-            {% for row in price_compare.rows %}
-            <tr>
-              <td>{{ row.competitor_name }}</td>
-              <td>{% if row.found and row.price_rub is not none %}{{ row.price_rub }} ₽{% else %}—{% endif %}</td>
+            {% for row in catalog_rows %}
+            <tr
+              class="{% if our_etalon and row.competitor == 'OUR' and row.part_number == our_etalon.part_number %}is-etalon{% endif %}"
+              data-competitor="{{ row.competitor }}"
+              data-package="{{ row.package or '' }}"
+              data-flash="{{ row.flash_kb or 0 }}"
+            >
+              <td>{% if row.competitor == "OUR" %}<b>Эталон OUR</b>{% else %}{{ row.competitor }}{% endif %}</td>
               <td>
-                {% if row.price_delta_pct is not none %}
-                  {{ row.price_delta_pct }}%
+                {% if row.competitor == "OUR" %}
+                <a href="/?part={{ row.part_number }}">{{ row.part_number }}</a>
                 {% else %}
-                  —
+                {{ row.part_number }}
                 {% endif %}
               </td>
-              <td class="{% if row.found and row.price_delta_pct is not none and row.price_delta_pct > 0 %}lose{% elif row.found and row.price_delta_pct is not none and row.price_delta_pct < 0 %}win{% else %}muted{% endif %}">
-                {{ row.verdict }}
-              </td>
+              <td>{{ row.core_arch or "—" }}</td>
+              <td>{% if row.flash_kb %}{{ row.flash_kb }} KB{% else %}—{% endif %}</td>
+              <td>{% if row.ram_kb %}{{ row.ram_kb }} KB{% else %}—{% endif %}</td>
+              <td>{% if row.freq_mhz %}{{ row.freq_mhz }} MHz{% else %}—{% endif %}</td>
+              <td>{{ row.package or "—" }}</td>
+              <td>{% if row.price_rub %}{{ row.price_rub }} ₽{% else %}—{% endif %}</td>
               <td>{% if row.stock_qty %}{{ row.stock_qty }} шт{% else %}—{% endif %}</td>
               <td>
                 {% if row.source_url %}
                 <a href="{{ row.source_url }}" rel="noopener noreferrer">открыть</a>
                 {% else %}—{% endif %}
+                {% if row.source_note %}<div class="muted">{{ row.source_note }}</div>{% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
-        {% if price_compare.found_competitors == 0 %}
-        <p>Артикул не найден в снятых карточках трёх конкурентов.</p>
-        {% endif %}
+      </div>
+      {% else %}
+      <p>Эталонный каталог не найден.</p>
       {% endif %}
     </section>
 
-    {% for table in competitor_tables %}
-    <section>
-      <h2>{{ table.competitor }}</h2>
-      {% if table.rows %}
+    <section id="charts">
+      <h2>Позиции на рынке</h2>
+      <p class="muted">Оси и нормализация 0–1 считаются в Pandas. Chart.js только рисует.</p>
+      <div class="charts">
+        <div>
+          <p>Наличие × цена, радиус ~ число штук</p>
+          <div class="chart-box"><canvas id="scatter-chart"></canvas></div>
+        </div>
+        <div>
+          <p>Цена (выгоднее) и наличие</p>
+          <div class="chart-box"><canvas id="radar-chart"></canvas></div>
+        </div>
+      </div>
+      {% if price_trend %}
+      <div>
+        <p>Тренд цены по датам среза</p>
+        <div class="chart-box"><canvas id="trend-chart"></canvas></div>
+      </div>
+      {% endif %}
+      <script type="application/json" id="chart-payload">{{ chart_payload | tojson }}</script>
+      <script type="application/json" id="radar-payload">{{ radar_payload | tojson }}</script>
+      <script type="application/json" id="trend-payload">{{ price_trend | tojson }}</script>
+    </section>
+
+    <section id="facts">
+      <h2>VALID / INVALID</h2>
+      {% if fact_rows %}
       <table>
         <thead>
           <tr>
-            <th>Артикул</th>
-            <th>Источник</th>
-            <th>Ядро</th>
-            <th>Flash</th>
-            <th>RAM</th>
-            <th>Частота</th>
-            <th>Корпус</th>
-            <th>Цена от 1 шт</th>
-            <th>Наличие</th>
+            <th>Тезис</th>
+            <th>Метрика</th>
+            <th>Наше</th>
+            <th>Среднее аналогов</th>
+            <th>Статус</th>
           </tr>
         </thead>
         <tbody>
-          {% for row in table.rows %}
+          {% for fact in fact_rows %}
           <tr>
-            <td>{{ row.part_number }}</td>
+            <td>{{ fact.claim }}</td>
+            <td>{{ fact.metric }}</td>
+            <td>{{ fact.our_val }}</td>
+            <td>{{ fact.comp_avg }}</td>
             <td>
-              {% if row.source_url %}
-              <a href="{{ row.source_url }}" rel="noopener noreferrer">карточка</a>
-              {% else %}—{% endif %}
-              {% if row.source_note %}<div class="muted">{{ row.source_note }}</div>{% endif %}
+              {% set st = (fact.status or '')|string|upper %}
+              <span class="badge {% if st == 'VALID' %}badge-valid{% else %}badge-invalid{% endif %}">{{ st or '—' }}</span>
             </td>
-            <td>{{ row.core_arch }}</td>
-            <td>{% if row.flash_kb %}{{ row.flash_kb }} KB{% else %}—{% endif %}</td>
-            <td>{% if row.ram_kb %}{{ row.ram_kb }} KB{% else %}—{% endif %}</td>
-            <td>{% if row.freq_mhz %}{{ row.freq_mhz }} MHz{% else %}—{% endif %}</td>
-            <td>{{ row.package or "—" }}</td>
-            <td>{% if row.price_rub %}{{ row.price_rub }} ₽{% else %}—{% endif %}</td>
-            <td>{% if row.stock_qty %}{{ row.stock_qty }} шт{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       {% else %}
-      <p>Карточек нет.</p>
+      <p class="muted">В последнем отчёте нет cited_facts — таблица пустая, факты не выдумываются.</p>
       {% endif %}
-    </section>
-    {% endfor %}
-
-    <section>
-      <h2>Последний отчёт</h2>
-      {% if latest %}
-      <p>Сформирован: {{ latest.generated_at }} · <span class="badge">{{ latest.status }}</span></p>
       {% if summary %}
       <p>{{ summary.executive_summary }}</p>
-      {% if summary.key_disadvantages %}
-      <p>Недостатки:</p>
-      <ul>
-        {% for item in summary.key_disadvantages %}<li>{{ item }}</li>{% endfor %}
-      </ul>
-      {% endif %}
       {% if summary.key_advantages %}
       <p>Преимущества:</p>
-      <ul>
-        {% for item in summary.key_advantages %}<li>{{ item }}</li>{% endfor %}
-      </ul>
+      <ul>{% for item in summary.key_advantages %}<li>{{ item }}</li>{% endfor %}</ul>
       {% endif %}
+      {% if summary.key_disadvantages %}
+      <p>Недостатки:</p>
+      <ul>{% for item in summary.key_disadvantages %}<li>{{ item }}</li>{% endfor %}</ul>
       {% endif %}
-      <p class="actions">
-        {% if pdf_report %}<a href="{{ pdf_report.href }}">Скачать PDF</a>{% endif %}
-        {% if html_report %}<a href="{{ html_report.href }}">Открыть HTML</a>{% endif %}
-      </p>
-      {% else %}
-      <p>Отчётов пока нет. На сервере выполните <code>python src/pipeline.py</code> или ночной cron.</p>
       {% endif %}
     </section>
 
-    {% if html_report %}
-    <section>
-      <h2>Просмотр HTML</h2>
-      <iframe title="Последний HTML-отчёт" src="{{ html_report.href }}"></iframe>
-    </section>
-    {% endif %}
-
-    <section>
-      <h2>Архив</h2>
+    <section id="reports">
+      <h2>Отчёты</h2>
+      {% if latest %}
+      <p>Сформирован: {{ latest.generated_at }} · <span class="badge badge-draft">{{ latest.status }}</span></p>
+      {% endif %}
       {% if reports %}
       <table>
         <thead><tr><th>Файл</th><th>Тип</th><th>Размер</th></tr></thead>
@@ -254,12 +386,146 @@
         </tbody>
       </table>
       {% else %}
-      <p>Папка reports пуста.</p>
+      <p>Папка reports пуста. На сервере выполните <code>python src/pipeline.py</code>.</p>
+      {% endif %}
+      {% if html_report %}
+      <p class="muted">Встроенный HTML-отчёт — архив пайплайна (Flash/RAM, KNN). Он <strong>не связан</strong> со строкой поиска. Актуальное сравнение по артикулу — блок «Сравнение» вверху страницы.</p>
+      <details>
+        <summary>Архивный HTML-отчёт пайплайна</summary>
+        <iframe title="Последний HTML-отчёт" src="{{ html_report.href }}"></iframe>
+      </details>
       {% endif %}
     </section>
   </main>
   <footer>
     Демо: dp32.shastudio.ru · пайплайн не является публичным API, открыты только отчёты.
   </footer>
+  <script>
+    (function () {
+      {% if query_part and compare_matrix %}
+      const compare = document.getElementById("compare");
+      if (compare) {
+        compare.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      {% endif %}
+      const competitor = document.getElementById("filter-competitor");
+      const pkg = document.getElementById("filter-package");
+      const flashMin = document.getElementById("filter-flash-min");
+      const flashMax = document.getElementById("filter-flash-max");
+      function applyFilters() {
+        const c = competitor.value;
+        const p = pkg.value;
+        const min = Number(flashMin.value);
+        const max = Number(flashMax.value);
+        document.querySelectorAll("#catalog tbody tr").forEach(function (tr) {
+          const okC = !c || tr.dataset.competitor === c;
+          const okP = !p || tr.dataset.package === p;
+          const flash = Number(tr.dataset.flash || 0);
+          const okMin = !flashMin.value || flash >= min;
+          const okMax = !flashMax.value || flash <= max;
+          tr.hidden = !(okC && okP && okMin && okMax);
+        });
+      }
+      [competitor, pkg, flashMin, flashMax].forEach(function (el) {
+        el.addEventListener("input", applyFilters);
+        el.addEventListener("change", applyFilters);
+      });
+      const onlyDiff = document.getElementById("only-diff");
+      if (onlyDiff) {
+        onlyDiff.addEventListener("change", function () {
+          document.querySelectorAll("#compare tr[data-same]").forEach(function (tr) {
+            tr.hidden = onlyDiff.checked && tr.dataset.same === "1";
+          });
+        });
+      }
+      const palette = {
+        "OUR": "#1f4e62",
+        "ЧипДип": "#c45c26",
+        "Платан": "#2b6e4f",
+        "Промэлектроника": "#7a4b2b"
+      };
+      const points = JSON.parse(document.getElementById("chart-payload").textContent || "[]");
+      const byComp = {};
+      points.forEach(function (pt) {
+        const key = pt.competitor || "other";
+        byComp[key] = byComp[key] || [];
+        byComp[key].push({ x: pt.stock_qty, y: pt.price_rub, r: pt.r, label: pt.label });
+      });
+      const scatterEl = document.getElementById("scatter-chart");
+      if (scatterEl && points.length) {
+        new Chart(scatterEl, {
+          type: "bubble",
+          data: {
+            datasets: Object.keys(byComp).map(function (name) {
+              return {
+                label: name,
+                data: byComp[name],
+                backgroundColor: (palette[name] || "#5c6774") + "99"
+              };
+            })
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "bottom" } },
+            scales: {
+              x: { title: { display: true, text: "Наличие, шт" } },
+              y: { title: { display: true, text: "Цена, ₽" } }
+            }
+          }
+        });
+      }
+      const radar = JSON.parse(document.getElementById("radar-payload").textContent || "{}");
+      const radarEl = document.getElementById("radar-chart");
+      if (radarEl && radar.datasets && radar.datasets.length) {
+        new Chart(radarEl, {
+          type: "radar",
+          data: {
+            labels: radar.labels,
+            datasets: radar.datasets.map(function (ds, i) {
+              const names = Object.keys(palette);
+              const color = palette[ds.label.split(" ")[0]] || names[i % names.length];
+              return {
+                label: ds.label,
+                data: ds.values,
+                borderColor: palette[ds.label.split(" ")[0]] || "#1f4e62",
+                backgroundColor: "transparent"
+              };
+            })
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { r: { min: 0, max: 1 } }
+          }
+        });
+      }
+      const trend = JSON.parse(document.getElementById("trend-payload").textContent || "[]");
+      const trendEl = document.getElementById("trend-chart");
+      if (trendEl && trend.length) {
+        const labels = Array.from(new Set(trend.map(function (row) { return row.scraped_at; }))).sort();
+        const series = {};
+        trend.forEach(function (row) {
+          const key = row.competitor_name + " " + row.part_number;
+          series[key] = series[key] || {};
+          series[key][row.scraped_at] = row.price_rub;
+        });
+        new Chart(trendEl, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: Object.keys(series).map(function (name) {
+              return {
+                label: name,
+                data: labels.map(function (d) { return series[name][d] ?? null; }),
+                spanGaps: true
+              };
+            })
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

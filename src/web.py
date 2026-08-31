@@ -17,9 +17,16 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.config import ROOT, get_settings  # noqa: E402
-from src.db import load_latest_report, load_latest_snapshot  # noqa: E402
+from src.db import load_latest_report, load_latest_snapshot, load_price_history  # noqa: E402
 from src.extractor import extract_by_rules  # noqa: E402
-from src.price_compare import compare_part_prices, competitor_tables  # noqa: E402
+from src.price_compare import (  # noqa: E402
+    catalog_rows,
+    chart_payload,
+    compare_matrix,
+    compare_part_prices,
+    competitor_tables,
+    radar_payload,
+)
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 ALLOWED_REPORT_SUFFIXES = {".pdf", ".html"}
@@ -120,6 +127,43 @@ def build_demo_context(query_part: str = "") -> dict[str, object]:
     pdf_report = next((item for item in reports if item["kind"] == "pdf"), None)
     our_parts = load_our_parts()
     query = query_part.strip()
+    tables = competitor_tables()
+    rows = catalog_rows(our_parts, tables)
+    compared = compare_part_prices(query) if query else None
+    matrix = compare_matrix(query) if query else None
+    needle = query.casefold()
+    focused = [
+        row
+        for row in rows
+        if needle and str(row.get("part_number", "")).casefold() == needle
+    ]
+    radar_source = focused if query else [row for row in rows if row.get("competitor") == "OUR"]
+    scatter_source = focused if query else rows
+    our_etalon = compared["our"] if compared else None
+    fact_rows: list[dict[str, object]] = []
+    kpi_advantages = 0
+    kpi_disadvantages = 0
+    if isinstance(summary, dict):
+        raw_facts = summary.get("cited_facts") or []
+        if isinstance(raw_facts, list):
+            fact_rows = [item for item in raw_facts if isinstance(item, dict)]
+        kpi_advantages = len(summary.get("key_advantages") or [])
+        kpi_disadvantages = len(summary.get("key_disadvantages") or [])
+    price_trend: list[dict[str, object]] = []
+    try:
+        history = load_price_history(part=query)
+        if not history.empty:
+            price_trend = history.to_dict(orient="records")
+    except Exception:
+        price_trend = []
+    visible_rows = focused if query else rows
+    packages = sorted(
+        {
+            str(row.get("package") or "").strip()
+            for row in visible_rows
+            if str(row.get("package") or "").strip()
+        }
+    )
     return {
         "reports": reports,
         "latest": latest,
@@ -130,9 +174,19 @@ def build_demo_context(query_part: str = "") -> dict[str, object]:
         "pdf_report": pdf_report,
         "our_parts": our_parts,
         "query_part": query,
+        "our_etalon": our_etalon,
         "query_hits": find_part_rows(query, our_parts, snap_records),
-        "price_compare": compare_part_prices(query) if query else None,
-        "competitor_tables": competitor_tables(),
+        "price_compare": compared,
+        "compare_matrix": matrix,
+        "competitor_tables": tables,
+        "catalog_rows": visible_rows,
+        "catalog_packages": packages,
+        "chart_payload": chart_payload(scatter_source),
+        "radar_payload": radar_payload(radar_source),
+        "fact_rows": fact_rows,
+        "kpi_advantages": kpi_advantages,
+        "kpi_disadvantages": kpi_disadvantages,
+        "price_trend": price_trend,
     }
 
 

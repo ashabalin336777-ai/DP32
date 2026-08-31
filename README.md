@@ -2,7 +2,7 @@
 
 Дипломный проект УИИ. MVP автоматического сравнения 32-битных микроконтроллеров: сбор каталогов, извлечение спецификаций, поиск аналогов и валидированный PDF-отчёт.
 
-**Демо:** [https://dp32.shastudio.ru](https://dp32.shastudio.ru) — эталон OUR и кнопка «Найти»: поиск у ЧипДип / Платан / Промэлектроника и сравнение цен (Pandas).  
+**Демо:** [https://dp32.shastudio.ru](https://dp32.shastudio.ru) — parametric comparison: поиск эталона OUR, сравнение **цены и наличия** с ЧипДип / Платан / Промэлектроника (Pandas), Chart.js, матрица OUR vs конкуренты.  
 Репозиторий: [ashabalin336777-ai/DP32](https://github.com/ashabalin336777-ai/DP32)
 
 Цифры и дельты считает Pandas / scikit-learn. LLM пишет текст и копирует значения из таблицы; выдуманные числа валидатор помечает как `VALID`/`INVALID` и отбрасывает недоказанные тезисы.
@@ -30,6 +30,28 @@ python src/web.py
 ```
 
 Отчёт: `reports/analysis_YYYY-MM-DD.pdf`. На Windows WeasyPrint часто требует GTK; тогда PDF собирается через Playwright. Локальная витрина: http://127.0.0.1:8080
+
+### Демо-страница (parametric comparison)
+
+Одна Jinja-страница `src/templates/demo.html` + `python src/web.py` (порт 8080). Streamlit/FastAPI не используются — совместимо с Docker и nginx.
+
+| Блок | Что показывает |
+|------|----------------|
+| **Поиск эталона OUR** | `GET /?part=STM32F103C8T6` — артикул из `data/our_catalog.html` |
+| **Сравнение** | Матрица: строки **цена / наличие**, колонки OUR + 3 конкурента; Δ% считает Pandas |
+| **Каталог** | Только выбранный артикул и его карточки у конкурентов |
+| **Графики** | Chart.js: scatter (наличие × цена), radar (нормализация 0–1 в Python) |
+| **VALID / INVALID** | `cited_facts` из последнего отчёта (если нет — пусто) |
+| **Отчёты** | PDF/HTML архив; iframe — отчёт пайплайна (Flash/RAM), **не зависит от поиска** |
+
+Пример локально:
+
+```powershell
+python src/web.py
+# http://127.0.0.1:8080/?part=STM32F411CEU6
+```
+
+Цифры на странице — только из Pandas / каталогов / SQLite; JS не пересчитывает дельты.
 
 ## Пайплайн
 
@@ -59,7 +81,8 @@ python src/web.py
 | `src/analyzer.py` | отчёт + VALID/INVALID |
 | `src/reporter.py` | Jinja2 → PDF |
 | `src/pipeline.py` | оркестрация |
-| `src/web.py` | демо-сайт отчётов |
+| `src/price_compare.py` | каталоги конкурентов, `compare_matrix`, payload для Chart.js |
+| `src/web.py` | демо-сайт: `build_demo_context`, отчёты |
 | `src/scheduler.py` | опциональный cron в контейнере |
 
 Гибрид: `search:web` (тот же `NEURAL_DEEP_API_KEY`, `POST {base}/search/web`) находит URL, Playwright качает HTML, парсеры/LLM извлекают поля, Pandas+KNN сравнивают, аналитик пишет отчёт. Без ключа или при `SEARCH_WEB=off` остаются URL из `data/scrape_targets.json`. Хосты конкурентов берутся из этих целей, не из кода. Селекторы: `data/extract_selectors.json`.
@@ -76,7 +99,7 @@ python src/web.py
 pytest
 ```
 
-Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, демо-страница, скрейпер (мок заголовков, 403, кэш) и `search:web` (мок HTTP). Живой LLM и сеть не требуются.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, демо-страница (поиск, матрица, Chart.js), `price_compare`, скрейпер (мок заголовков, 403, кэш) и `search:web` (мок HTTP). Живой LLM и сеть не требуются.
 
 ## Деплой на Timeweb VPS
 
@@ -91,7 +114,34 @@ pytest
 
 Второй nginx на хост не ставить: 80/443 уже заняты.
 
-### Обновление этого этапа (гибрид search:web)
+### Обновление на VPS (демо + код)
+
+На сервере `/opt/dp32`. Ключ в `.env` не перезаписывать.
+
+```bash
+cd /opt/dp32
+git status
+git checkout -- docker-compose.yml
+git pull --ff-only origin main
+
+docker compose up -d --build web
+docker network connect shastudio_default mcu-analyzer-web 2>/dev/null || true
+
+curl -sS http://127.0.0.1:8082/healthz
+curl -sS -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8082/?part=STM32F103C8T6'
+curl -sS --resolve dp32.shastudio.ru:443:127.0.0.1 \
+  -o /dev/null -w '%{http_code}\n' 'https://dp32.shastudio.ru/?part=STM32F103C8T6'
+```
+
+Проверка в браузере: https://dp32.shastudio.ru/?part=STM32F411CEU6 — блок **«Сравнение · …»** сразу под KPI (цена и наличие). Архивный HTML-отчёт внизу страницы — отдельно, от поиска не зависит.
+
+Полный прогон пайплайна (по необходимости):
+
+```bash
+docker compose run --rm analyzer python src/pipeline.py
+```
+
+### Обновление этапа search:web (гибрид)
 
 На сервере, по шагам. `.env` не коммитится — ключ не перезаписывать из примера.
 

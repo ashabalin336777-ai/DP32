@@ -22,6 +22,15 @@ def test_demo_page_renders() -> None:
     assert "https://www.promelec.ru/product/126937/" in html
     assert "3646 шт" in html
     assert "Наличие" in html
+    assert 'id="catalog"' in html
+    assert 'id="charts"' in html
+    assert 'id="facts"' in html
+    assert 'id="reports"' in html
+    assert "cdn.jsdelivr.net/npm/chart.js" in html
+    assert 'id="filter-competitor"' in html
+    assert "Поиск эталона OUR" in html
+    assert 'list="our-parts"' in html
+    assert 'id="our-parts"' in html
 
 
 def test_safe_report_path_blocks_traversal() -> None:
@@ -36,6 +45,12 @@ def test_demo_context_keys() -> None:
     assert "reports" in ctx
     assert "snapshot_rows" in ctx
     assert len(ctx["our_parts"]) == 2
+    assert ctx["chart_payload"]
+    assert ctx["radar_payload"]["datasets"]
+    assert ctx["compare_matrix"] is None
+    assert isinstance(ctx["fact_rows"], list)
+    assert "kpi_advantages" in ctx
+    assert "kpi_disadvantages" in ctx
 
 
 def test_load_our_parts_from_catalog() -> None:
@@ -61,3 +76,39 @@ def test_demo_search_renders_hits() -> None:
     assert "ЧипДип" in html
     assert "Платан" in html
     assert "Промэлектроника" in html
+
+
+def test_demo_search_sets_our_etalon() -> None:
+    ctx = build_demo_context("STM32F411CEU6")
+    assert ctx["our_etalon"]["part_number"] == "STM32F411CEU6"
+    html = render_demo_html("STM32F411CEU6")
+    assert "Эталон OUR задан поиском" in html
+    assert ctx["chart_payload"]
+    assert all(pt["part_number"] == "STM32F411CEU6" for pt in ctx["chart_payload"])
+
+
+def test_demo_matrix_stm32f103() -> None:
+    html = render_demo_html("STM32F103C8T6")
+    ctx = build_demo_context("STM32F103C8T6")
+    matrix = ctx["compare_matrix"]
+    assert ctx["our_etalon"]["part_number"] == "STM32F103C8T6"
+    assert matrix is not None
+    assert 'id="compare"' in html
+    assert matrix["columns"] == ["OUR", "ЧипДип", "Платан", "Промэлектроника"]
+    by_key = {row["key"]: row for row in matrix["rows"]}
+    assert list(by_key) == ["price_rub", "stock_qty"]
+    assert "210" in by_key["price_rub"]["values"]["OUR"]
+    assert "160" in by_key["price_rub"]["values"]["ЧипДип"]
+    assert "150" in by_key["price_rub"]["values"]["Платан"]
+    assert by_key["price_rub"]["deltas"]["Платан"] == 40.0
+    assert by_key["stock_qty"]["higher_better"] is True
+    assert "3646" in by_key["stock_qty"]["values"]["ЧипДип"]
+    facts = ctx["fact_rows"]
+    if facts:
+        assert "badge-valid" in html or "VALID" in html
+    catalog_parts = {row["part_number"] for row in ctx["catalog_rows"]}
+    assert catalog_parts == {"STM32F103C8T6"}
+    assert '<a href="/?part=STM32F411CEU6">' not in html
+    assert ctx["radar_payload"]["labels"] == ["Цена (выгоднее)", "Наличие"]
+    assert all("stock_qty" in pt for pt in ctx["chart_payload"])
+    assert all("freq_mhz" not in pt for pt in ctx["chart_payload"])

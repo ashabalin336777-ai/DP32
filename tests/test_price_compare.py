@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.price_compare import (
+    compare_matrix,
     compare_part_prices,
     competitor_tables,
     load_catalog_offers,
@@ -66,3 +67,16 @@ def test_demo_find_shows_three_competitors() -> None:
     assert "Промэлектроника" in html
     assert "150" in html
     assert "OUR дороже" in html
+
+
+def test_compare_matrix_stm32f103() -> None:
+    matrix = compare_matrix("STM32F103C8T6")
+    assert matrix is not None
+    keys = [row["key"] for row in matrix["rows"]]
+    assert keys == ["price_rub", "stock_qty"]
+    price = next(row for row in matrix["rows"] if row["key"] == "price_rub")
+    assert price["values"]["OUR"] == "210 ₽"
+    assert price["values"]["Платан"] == "150 ₽"
+    assert price["deltas"]["Платан"] == 40.0
+    stock = next(row for row in matrix["rows"] if row["key"] == "stock_qty")
+    assert stock["higher_better"] is True

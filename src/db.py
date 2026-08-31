@@ -164,6 +164,32 @@ def upsert_mcu_specs(
     return count
 
 
+def load_price_history(
+    db_path: str | Path | None = None,
+    part: str = "",
+) -> pd.DataFrame:
+    """Price points over time. Empty unless more than one scraped_at date."""
+    init_db(db_path)
+    query = """
+        SELECT
+            m.part_number,
+            c.name AS competitor_name,
+            m.scraped_at,
+            m.price_rub
+        FROM mcu_data AS m
+        JOIN competitors AS c ON c.id = m.competitor_id
+        ORDER BY m.scraped_at, c.name, m.part_number
+    """
+    with get_connection(db_path) as conn:
+        frame = pd.read_sql(query, conn)
+    needle = part.strip().casefold()
+    if needle and not frame.empty:
+        frame = frame[frame["part_number"].astype(str).str.casefold() == needle]
+    if frame.empty or frame["scraped_at"].nunique() < 2:
+        return frame.iloc[0:0].copy()
+    return frame
+
+
 def load_latest_snapshot(db_path: str | Path | None = None) -> pd.DataFrame:
     """Latest row per (part_number, competitor_id) via MAX(scraped_at)."""
     init_db(db_path)
