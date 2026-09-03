@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}DP32 — сравнение{% endblock %}
+{% block lead %}Конкурентный анализ цены и наличия по ЧипДип / Платан / Промэлектроника.{% endblock %}
+
+{% block header_extra %}
+<form class="filters" method="get" action="/compare" style="margin-bottom:0">
+  <label for="part">Артикул или ID карточки
+    <input id="part" name="part" type="search" value="{{ query_part }}" placeholder="STM32F103C8T6 или 126937">
+  </label>
+  <button type="submit">Сравнить</button>
+</form>
+{% if exact_match and compare_matrix %}
+<p>Артикул <b>{{ compare_matrix.part }}</b> — {{ price_compare.found_competitors }} стоков.</p>
+{% elif query_part %}
+<p class="muted">Запрос <code>{{ query_part }}</code> не найден или неоднозначен. Выберите МК на странице «Выбор МК».</p>
+{% else %}
+<p class="muted">Укажите артикул или перейдите сюда со страницы выбора МК.</p>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if compare_matrix %}
+<section id="compare">
+  <h2>Сравнение · {{ compare_matrix.part }}</h2>
+  <p class="muted">Δ цены — к самому дешёвому, Δ наличия — к максимальному остатку (Pandas).</p>
+  {% if price_compare and price_compare.cheapest_name %}
+  <p>Самая низкая цена: <b>{{ price_compare.cheapest_name }}</b> — {{ price_compare.cheapest_price }} ₽.</p>
+  {% endif %}
+  {% if price_compare and price_compare.richest_name %}
+  <p>Больше всего в наличии: <b>{{ price_compare.richest_name }}</b> — {{ price_compare.richest_stock|int }} шт.</p>
+  {% endif %}
+  <p><a href="/charts?part={{ compare_matrix.part }}">Открыть график по этому артикулу</a></p>
+  <label class="muted"><input id="only-diff" type="checkbox"> только отличия</label>
+  <div class="matrix-wrap">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>Параметр</th>
+          {% for col in compare_matrix.columns %}
+          <th class="{% if col == compare_matrix.cheapest_name %}best{% endif %}">{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in compare_matrix.rows %}
+        <tr data-same="{{ 1 if row.same else 0 }}">
+          <td>{{ row.attr }}</td>
+          {% for col in compare_matrix.columns %}
+          <td class="{% if col == compare_matrix.cheapest_name and row.key == 'price_rub' %}best{% elif col == compare_matrix.richest_name and row.key == 'stock_qty' %}best{% endif %}">
+            {{ row.values[col] }}
+            {% if row.deltas.get(col) is not none %}
+              {% set d = row.deltas.get(col) %}
+              {% if row.higher_better %}
+              <div class="{% if d > 0 %}win{% elif d < 0 %}lose{% else %}muted{% endif %}">Δ {{ d }}%</div>
+              {% else %}
+              <div class="{% if d > 0 %}lose{% elif d < 0 %}win{% else %}muted{% endif %}">Δ {{ d }}%</div>
+              {% endif %}
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if price_compare %}
+  <table>
+    <thead>
+      <tr>
+        <th>Конкурент</th>
+        <th>Вывод по цене</th>
+        <th>Карточка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in price_compare.rows %}
+      <tr>
+        <td>{{ row.competitor_name }}</td>
+        <td class="{% if row.found and row.price_delta_pct is not none and row.price_delta_pct > 0 %}lose{% elif row.found and row.price_delta_pct is not none and row.price_delta_pct < 0 %}win{% else %}muted{% endif %}">
+          {{ row.verdict }}
+        </td>
+        <td>
+          {% if row.source_url %}
+          <a href="{{ row.source_url }}" rel="noopener noreferrer">открыть</a>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const onlyDiff = document.getElementById("only-diff");
+  if (!onlyDiff) return;
+  onlyDiff.addEventListener("change", function () {
+    document.querySelectorAll("#compare tr[data-same]").forEach(function (tr) {
+      tr.hidden = onlyDiff.checked && tr.dataset.same === "1";
+    });
+  });
+})();
+</script>
+{% endblock %}

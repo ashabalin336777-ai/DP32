@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}DP32{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600;700&display=swap" rel="stylesheet">
+  {% block head_extra %}{% endblock %}
+  <style>
+    :root {
+      --ink: #1a2330;
+      --muted: #5c6774;
+      --line: #c9d3dc;
+      --paper: #f3f6f8;
+      --panel: #ffffff;
+      --our: #1f4e62;
+      --our-soft: #e4eef2;
+      --win: #0d7a3e;
+      --lose: #b42318;
+      --accent: #c45c26;
+      --grid: rgba(31, 78, 98, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "DejaVu Sans", sans-serif;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(180deg, #e8eef2 0, transparent 220px),
+        repeating-linear-gradient(0deg, transparent, transparent 23px, var(--grid) 24px),
+        repeating-linear-gradient(90deg, transparent, transparent 23px, var(--grid) 24px);
+      line-height: 1.5;
+    }
+    header, main, footer { max-width: 1120px; margin: 0 auto; padding: 20px 16px; }
+    header { padding-top: 36px; }
+    .brand {
+      font-family: "IBM Plex Serif", "Times New Roman", serif;
+      font-size: clamp(42px, 7vw, 64px);
+      letter-spacing: -0.03em;
+      margin: 0;
+      color: var(--our);
+    }
+    .lead { color: var(--muted); margin: 6px 0 20px; max-width: 42rem; }
+    nav.site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 20px;
+    }
+    nav.site-nav a {
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      text-decoration: none;
+      background: var(--panel);
+    }
+    nav.site-nav a.active {
+      background: var(--our);
+      color: #fff;
+      border-color: var(--our);
+    }
+    .filters input, .filters select, .lookup input, .lookup select {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      font: inherit;
+      background: var(--panel);
+    }
+    .lookup button, .filters button {
+      padding: 9px 16px;
+      border: 0;
+      background: var(--our);
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+    }
+    section { background: var(--panel); border: 1px solid var(--line); padding: 18px 20px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; font-size: 18px; font-family: "IBM Plex Serif", serif; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .filters label { font-size: 13px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #edf1f4; font-size: 14px; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .matrix-wrap { overflow-x: auto; }
+    .matrix th:first-child, .matrix td:first-child {
+      position: sticky;
+      left: 0;
+      background: var(--panel);
+      z-index: 1;
+      min-width: 7rem;
+    }
+    .matrix th.best, .matrix td.best { background: var(--our-soft); font-weight: 600; color: var(--our); }
+    .win { color: var(--win); font-weight: 600; }
+    .lose { color: var(--lose); font-weight: 600; }
+    .muted { color: var(--muted); }
+    .chart-box { min-height: 320px; position: relative; }
+    a { color: var(--our); }
+    footer { color: var(--muted); font-size: 13px; }
+    {% block extra_css %}{% endblock %}
+  </style>
+</head>
+<body>
+  <header>
+    <h1 class="brand">DP32</h1>
+    <p class="lead">{% block lead %}Дипломный проект УИИ: подбор 32-битных МК по параметрам и сравнение цены/наличия на трёх стоках. Цифры — Pandas.{% endblock %}</p>
+    <nav class="site-nav" aria-label="Разделы демо">
+      <a href="/finder" class="{% if active_nav == 'finder' %}active{% endif %}">Выбор МК</a>
+      <a href="/compare{{ part_qs }}" class="{% if active_nav == 'compare' %}active{% endif %}">Сравнение</a>
+      <a href="/charts{{ part_qs }}" class="{% if active_nav == 'charts' %}active{% endif %}">График</a>
+      <a href="/reports" class="{% if active_nav == 'reports' %}active{% endif %}">Отчёты</a>
+    </nav>
+    {% block header_extra %}{% endblock %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    Демо: dp32.shastudio.ru · {{ catalog_count }} артикулов в каталоге
+    {% if selected_part %} · выбрано: <b>{{ selected_part }}</b>{% endif %}
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}DP32 — график{% endblock %}
+{% block head_extra %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+{% block lead %}Наличие × цена по каталогу трёх стоков. Радиус пузырька ~ число штук на складе.{% endblock %}
+
+{% block header_extra %}
+{% if resolved_part %}
+<p>График для <b>{{ resolved_part }}</b> · <a href="/compare?part={{ resolved_part }}">вернуться к сравнению</a></p>
+{% elif query_part %}
+<p class="muted">Артикул <code>{{ query_part }}</code> не найден — показаны все позиции каталога.</p>
+{% else %}
+<p class="muted">Все позиции каталога. Выберите артикул на странице «Выбор МК» или «Сравнение».</p>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<section id="charts">
+  <h2>Позиции на рынке</h2>
+  <p class="muted">Chart.js рисует точки; размер считается в Pandas.</p>
+  <p>Наличие × цена, радиус ~ число штук</p>
+  <div class="chart-box"><canvas id="scatter-chart"></canvas></div>
+  <script type="application/json" id="chart-payload">{{ chart_payload | tojson }}</script>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const palette = {
+    "ЧипДип": "#c45c26",
+    "Платан": "#2b6e4f",
+    "Промэлектроника": "#7a4b2b"
+  };
+  const points = JSON.parse(document.getElementById("chart-payload").textContent || "[]");
+  const byComp = {};
+  points.forEach(function (pt) {
+    const key = pt.competitor || "other";
+    byComp[key] = byComp[key] || [];
+    byComp[key].push({ x: pt.stock_qty, y: pt.price_rub, r: pt.r, label: pt.label });
+  });
+  const scatterEl = document.getElementById("scatter-chart");
+  if (scatterEl && points.length) {
+    new Chart(scatterEl, {
+      type: "bubble",
+      data: {
+        datasets: Object.keys(byComp).map(function (name) {
+          return {
+            label: name,
+            data: byComp[name],
+            backgroundColor: (palette[name] || "#5c6774") + "99"
+          };
+        })
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom" } },
+        scales: {
+          x: { title: { display: true, text: "Наличие, шт" } },
+          y: { title: { display: true, text: "Цена, ₽" } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

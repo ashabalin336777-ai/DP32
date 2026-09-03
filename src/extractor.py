@@ -64,9 +64,12 @@ class MCUExtractSpec(BaseModel):
     price_rub: float = Field(default=0, ge=0)
     stock_qty: int = Field(default=0, ge=0)
     delivery_days: int = Field(default=0, ge=0)
+    brand: str = Field(default="unknown")
+    temp_range: str = Field(default="unknown")
+    nomenclature_id: str = Field(default="")
     llm_confidence: float = Field(default=EMPTY_HTML_CONFIDENCE, ge=0.0, le=1.0)
 
-    @field_validator("part_number", "core_arch", "package", mode="before")
+    @field_validator("part_number", "core_arch", "package", "brand", "temp_range", mode="before")
     @classmethod
     def _blank_to_unknown(cls, value: object) -> object:
         if value is None:
@@ -366,6 +369,9 @@ def _empty_fields() -> dict[str, object]:
         "price_rub": 0.0,
         "stock_qty": 0,
         "delivery_days": 0,
+        "brand": "unknown",
+        "temp_range": "unknown",
+        "nomenclature_id": "",
         "llm_confidence": 1.0,
     }
 
@@ -394,6 +400,12 @@ def _apply_label(fields: dict[str, object], label: str, value: str) -> None:
         if value.casefold().startswith("от"):
             return
         fields["price_rub"] = float(number or 0)
+    elif "бренд" in key:
+        fields["brand"] = value
+    elif "температур" in key or "temp" in key:
+        fields["temp_range"] = value
+    elif "номенклатур" in key:
+        fields["nomenclature_id"] = re.sub(r"\D+", "", value) or value.strip()
 
 
 @lru_cache(maxsize=1)
@@ -607,6 +619,9 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
             "price_rub": 0.0,
             "stock_qty": 0,
             "delivery_days": 0,
+            "brand": "unknown",
+            "temp_range": "unknown",
+            "nomenclature_id": "",
             "llm_confidence": 1.0,
         }
         for raw_li in re.findall(r"<li\b[^>]*>(.*?)</li>", article, flags=re.I | re.S):
@@ -636,6 +651,12 @@ def extract_by_rules(html: str) -> list[MCUExtractSpec]:
                 fields["price_rub"] = float(number or 0)
             elif "постав" in key or "дней" in key:
                 fields["delivery_days"] = int(number or 0)
+            elif "бренд" in key:
+                fields["brand"] = value or "unknown"
+            elif "температур" in key:
+                fields["temp_range"] = value or "unknown"
+            elif "номенклатур" in key:
+                fields["nomenclature_id"] = re.sub(r"\D+", "", value) or value.strip()
         spec = MCUExtractSpec.model_validate(fields)
         if spec.part_number != "unknown":
             specs.append(spec)

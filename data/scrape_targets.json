@@ -3,13 +3,23 @@
     {
       "competitor": "ЧипДип",
       "slug": "chipdip",
+      "kind": "listing",
       "url": "https://www.chipdip.ru/catalog/popular/stm32f103",
       "fixture": "data/chipdip_catalog.html",
-      "ready_selector": ".item, .catalog-item, table"
+      "ready_selector": ".item, .catalog-item, table, article"
     },
     {
       "competitor": "ЧипДип",
       "slug": "chipdip",
+      "kind": "listing",
+      "url": "https://www.chipdip.ru/catalog/popular/stm32f4",
+      "fixture": "data/chipdip_catalog.html",
+      "ready_selector": ".item, .catalog-item, table, article"
+    },
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "kind": "product",
       "url": "https://www.chipdip.ru/product/stm32f411ceu6-mikrokontroller-32-bit-st-microelectronics-9000372706",
       "fixture": "data/chipdip_catalog.html",
       "ready_selector": "h1, .product, table"
@@ -17,18 +27,36 @@
     {
       "competitor": "Платан",
       "slug": "platan",
+      "kind": "listing",
+      "url": "https://www.platan.ru/cgi-bin/qwery_p.pl?idc=100011&idv=stm32",
+      "fixture": "data/platan_catalog.html"
+    },
+    {
+      "competitor": "Платан",
+      "slug": "platan",
+      "kind": "product",
       "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2015361529",
       "fixture": "data/platan_catalog.html"
     },
     {
       "competitor": "Платан",
       "slug": "platan",
+      "kind": "product",
       "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2011485871",
       "fixture": "data/platan_catalog.html"
     },
     {
       "competitor": "Промэлектроника",
       "slug": "promelec",
+      "kind": "listing",
+      "url": "https://www.promelec.ru/catalog/mikroshemy/mikrokontrollery/",
+      "fixture": "data/promelec_catalog.html",
+      "ready_selector": "h1, .table-list, .product-preview__title, article"
+    },
+    {
+      "competitor": "Промэлектроника",
+      "slug": "promelec",
+      "kind": "product",
       "url": "https://www.promelec.ru/product/126937/",
       "fixture": "data/promelec_catalog.html",
       "ready_selector": "h1, .table-list, .product-preview__title"
@@ -36,6 +64,7 @@
     {
       "competitor": "Промэлектроника",
       "slug": "promelec",
+      "kind": "product",
       "url": "https://www.promelec.ru/product/159744/",
       "fixture": "data/promelec_catalog.html",
       "ready_selector": "h1, .table-list, .product-preview__title"
@@ -43,6 +72,7 @@
     {
       "competitor": "OUR",
       "slug": "our",
+      "kind": "product",
       "url": "data/our_catalog.html",
       "fixture": "data/our_catalog.html"
     }

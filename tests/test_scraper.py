@@ -197,5 +197,8 @@ def test_load_targets_reads_fixture_and_live_url() -> None:
     assert chipdip
     assert chipdip[0].url.startswith("https://www.chipdip.ru/")
     assert chipdip[0].fixture == "data/chipdip_catalog.html"
+    assert chipdip[0].kind == "listing"
+    listings = [item for item in chipdip if item.kind == "listing"]
+    assert len(listings) <= 3
     our = [item for item in targets if item.competitor == "OUR"]
     assert our[0].url == "data/our_catalog.html"

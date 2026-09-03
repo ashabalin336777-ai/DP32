@@ -26,6 +26,7 @@ if str(_ROOT) not in sys.path:
 from src.config import ROOT, Settings, get_settings, write_alert  # noqa: E402
 
 ALLOWED_COMPETITORS = {"ЧипДип", "Платан", "Промэлектроника", "OUR"}
+LISTING_LIMIT_PER_STOCK = 3
 SleepFn = Callable[[float], Awaitable[None] | None]
 
 
@@ -36,6 +37,7 @@ class ScrapeTarget:
     url: str
     fixture: str = ""
     ready_selector: str = ""
+    kind: str = "product"
 
 
 @dataclass(frozen=True)
@@ -92,12 +94,19 @@ def load_targets(path: Path | None = None) -> list[ScrapeTarget]:
     payload = json.loads(targets_path.read_text(encoding="utf-8"))
     raw_items = payload.get("targets", payload)
     targets: list[ScrapeTarget] = []
+    listing_counts: dict[str, int] = {}
     for item in raw_items:
         competitor = str(item["competitor"]).strip()
         if competitor not in ALLOWED_COMPETITORS:
             raise ValueError(
                 f"Unknown competitor {competitor!r}. Allowed: {sorted(ALLOWED_COMPETITORS)}"
             )
+        kind = str(item.get("kind") or "product").strip().casefold()
+        if kind == "listing":
+            used = listing_counts.get(competitor, 0)
+            if used >= LISTING_LIMIT_PER_STOCK:
+                continue
+            listing_counts[competitor] = used + 1
         slug = str(item.get("slug") or _slugify(competitor))
         targets.append(
             ScrapeTarget(
@@ -106,6 +115,7 @@ def load_targets(path: Path | None = None) -> list[ScrapeTarget]:
                 url=str(item["url"]).strip(),
                 fixture=str(item.get("fixture") or "").strip(),
                 ready_selector=str(item.get("ready_selector") or "").strip(),
+                kind=kind,
             )
         )
     if not targets:

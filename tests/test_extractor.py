@@ -73,7 +73,7 @@ def test_extract_by_rules_our_catalog(our_catalog_html: str) -> None:
 def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
     specs = extract_by_rules(platan_catalog_html)
     parts = {item.part_number: item for item in specs}
-    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    assert {"STM32F103C8T6", "STM32F411CEU6", "STM32F103CBT6", "STM32F407VGT6", "STM32F107VCT6"} <= set(parts)
     f103 = parts["STM32F103C8T6"]
     assert f103.core_arch == "ARM Cortex M3"
     assert f103.flash_kb == 64
@@ -83,6 +83,9 @@ def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
     assert f103.pins_count == 48
     assert f103.price_rub == 150
     assert f103.stock_qty == 1613
+    assert f103.brand == "STMicroelectronics"
+    assert "-40" in f103.temp_range
+    assert f103.nomenclature_id == "2015361529"
     f411 = parts["STM32F411CEU6"]
     assert f411.core_arch == "ARM Cortex M4"
     assert f411.flash_kb == 512
@@ -96,7 +99,7 @@ def test_extract_by_rules_platan_catalog(platan_catalog_html: str) -> None:
 def test_extract_by_rules_chipdip_catalog(chipdip_catalog_html: str) -> None:
     specs = extract_by_rules(chipdip_catalog_html)
     parts = {item.part_number: item for item in specs}
-    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    assert {"STM32F103C8T6", "STM32F411CEU6", "STM32F103CBT6", "STM32F407VGT6", "STM32F107VCT6"} <= set(parts)
     f103 = parts["STM32F103C8T6"]
     assert f103.core_arch == "Cortex-M3"
     assert f103.flash_kb == 64
@@ -115,7 +118,7 @@ def test_extract_by_rules_chipdip_catalog(chipdip_catalog_html: str) -> None:
 def test_extract_by_rules_promelec_catalog(promelec_catalog_html: str) -> None:
     specs = extract_by_rules(promelec_catalog_html)
     parts = {item.part_number: item for item in specs}
-    assert set(parts) == {"STM32F103C8T6", "STM32F411CEU6"}
+    assert {"STM32F103C8T6", "STM32F411CEU6", "STM32F103CBT6", "STM32F407VGT6", "STM32F107VCT6"} <= set(parts)
     f103 = parts["STM32F103C8T6"]
     assert f103.core_arch == "ARM Cortex-M3"
     assert f103.flash_kb == 64

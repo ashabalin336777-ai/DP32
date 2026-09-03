@@ -1,14 +1,13 @@
-"""Demo site for dp32.shastudio.ru — reports and pipeline status."""
+"""Demo site for dp32.shastudio.ru — three pages: finder, compare, charts."""
 
 from __future__ import annotations
 
-import json
 import logging
 import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, urlencode, unquote, urlparse
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -16,8 +15,13 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from src.catalog import (  # noqa: E402
+    facet_values,
+    filter_catalog_rows,
+    merge_unique_parts,
+    resolve_part,
+)
 from src.config import ROOT, get_settings  # noqa: E402
-from src.db import load_latest_report, load_latest_snapshot, load_price_history  # noqa: E402
 from src.extractor import extract_by_rules  # noqa: E402
 from src.price_compare import (  # noqa: E402
     catalog_rows,
@@ -25,11 +29,22 @@ from src.price_compare import (  # noqa: E402
     compare_matrix,
     compare_part_prices,
     competitor_tables,
-    radar_payload,
 )
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 ALLOWED_REPORT_SUFFIXES = {".pdf", ".html"}
+FILTER_KEYS = (
+    "part",
+    "nomenclature",
+    "brand",
+    "core",
+    "package",
+    "temp",
+    "flash_min",
+    "flash_max",
+    "freq_min",
+    "freq_max",
+)
 
 
 def _jinja() -> Environment:
@@ -73,6 +88,10 @@ def safe_report_path(name: str) -> Path | None:
     return path
 
 
+def _norm_part(value: object) -> str:
+    return str(value or "").strip().casefold()
+
+
 def load_our_parts() -> list[dict[str, object]]:
     path = ROOT / "data" / "our_catalog.html"
     if not path.is_file():
@@ -81,117 +100,111 @@ def load_our_parts() -> list[dict[str, object]]:
     return [spec.model_dump() for spec in extract_by_rules(html)]
 
 
-def find_part_rows(
-    query: str,
-    our_parts: list[dict[str, object]],
-    snapshot_rows: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    needle = query.strip().casefold()
-    if not needle:
-        return []
-    found: list[dict[str, object]] = []
-    for item in our_parts:
-        if str(item.get("part_number", "")).casefold() == needle:
-            found.append({**item, "competitor_name": "OUR"})
-    for row in snapshot_rows:
-        if str(row.get("part_number", "")).casefold() != needle:
-            continue
-        if str(row.get("competitor_name", "")) == "OUR":
-            continue
-        found.append(row)
-    return found
+def _load_stock_rows() -> list[dict[str, object]]:
+    return catalog_rows(competitor_tables())
 
 
-def build_demo_context(query_part: str = "") -> dict[str, object]:
-    reports = list_report_files()
-    latest = None
-    snap_records: list[dict[str, object]] = []
-    snapshot_rows = 0
-    our_count = 0
-    try:
-        latest = load_latest_report()
-        snapshot = load_latest_snapshot()
-        if not snapshot.empty:
-            snap_records = snapshot.to_dict(orient="records")
-            snapshot_rows = len(snap_records)
-            our_count = sum(1 for row in snap_records if row.get("competitor_name") == "OUR")
-    except Exception:
-        latest = None
-    summary = None
-    if latest and latest.get("summary_json"):
-        try:
-            summary = json.loads(latest["summary_json"])
-        except json.JSONDecodeError:
-            summary = None
-    html_report = next((item for item in reports if item["kind"] == "html"), None)
-    pdf_report = next((item for item in reports if item["kind"] == "pdf"), None)
-    our_parts = load_our_parts()
-    query = query_part.strip()
-    tables = competitor_tables()
-    rows = catalog_rows(our_parts, tables)
-    compared = compare_part_prices(query) if query else None
-    matrix = compare_matrix(query) if query else None
-    needle = query.casefold()
-    focused = [
-        row
-        for row in rows
-        if needle and str(row.get("part_number", "")).casefold() == needle
-    ]
-    radar_source = focused if query else [row for row in rows if row.get("competitor") == "OUR"]
-    scatter_source = focused if query else rows
-    our_etalon = compared["our"] if compared else None
-    fact_rows: list[dict[str, object]] = []
-    kpi_advantages = 0
-    kpi_disadvantages = 0
-    if isinstance(summary, dict):
-        raw_facts = summary.get("cited_facts") or []
-        if isinstance(raw_facts, list):
-            fact_rows = [item for item in raw_facts if isinstance(item, dict)]
-        kpi_advantages = len(summary.get("key_advantages") or [])
-        kpi_disadvantages = len(summary.get("key_disadvantages") or [])
-    price_trend: list[dict[str, object]] = []
-    try:
-        history = load_price_history(part=query)
-        if not history.empty:
-            price_trend = history.to_dict(orient="records")
-    except Exception:
-        price_trend = []
-    visible_rows = focused if query else rows
-    packages = sorted(
-        {
-            str(row.get("package") or "").strip()
-            for row in visible_rows
-            if str(row.get("package") or "").strip()
-        }
-    )
+def _parse_filters(query: dict[str, list[str]]) -> dict[str, str]:
+    return {key: (query.get(key) or [""])[0].strip() for key in FILTER_KEYS}
+
+
+def _part_query(part: str) -> str:
+    token = part.strip()
+    return f"?{urlencode({'part': token})}" if token else ""
+
+
+def _base_context(*, active: str, part: str = "") -> dict[str, object]:
+    rows = _load_stock_rows()
+    parts = sorted({str(row.get("part_number") or "") for row in rows if row.get("part_number")})
     return {
-        "reports": reports,
-        "latest": latest,
-        "summary": summary,
-        "snapshot_rows": snapshot_rows,
-        "our_count": our_count or len(our_parts),
-        "html_report": html_report,
-        "pdf_report": pdf_report,
-        "our_parts": our_parts,
-        "query_part": query,
-        "our_etalon": our_etalon,
-        "query_hits": find_part_rows(query, our_parts, snap_records),
-        "price_compare": compared,
-        "compare_matrix": matrix,
-        "competitor_tables": tables,
-        "catalog_rows": visible_rows,
-        "catalog_packages": packages,
-        "chart_payload": chart_payload(scatter_source),
-        "radar_payload": radar_payload(radar_source),
-        "fact_rows": fact_rows,
-        "kpi_advantages": kpi_advantages,
-        "kpi_disadvantages": kpi_disadvantages,
-        "price_trend": price_trend,
+        "active_nav": active,
+        "selected_part": part.strip(),
+        "part_qs": _part_query(part),
+        "catalog_count": len(parts),
     }
 
 
+def build_finder_context(filters: dict[str, str] | None = None) -> dict[str, object]:
+    filters = filters or {}
+    rows = _load_stock_rows()
+    matched = filter_catalog_rows(rows, filters) if any(filters.values()) else merge_unique_parts(rows)
+    ctx = _base_context(active="finder")
+    ctx.update(
+        {
+            "filters": filters,
+            "finder_rows": matched,
+            "facet_brands": facet_values(rows, "brand"),
+            "facet_packages": facet_values(rows, "package"),
+            "facet_cores": facet_values(rows, "core_arch"),
+        }
+    )
+    return ctx
+
+
+def build_compare_context(part: str = "") -> dict[str, object]:
+    rows = _load_stock_rows()
+    query = part.strip()
+    resolved = resolve_part(query, rows) if query else None
+    exact = resolved is not None
+    compared = compare_part_prices(resolved) if exact else None
+    matrix = compare_matrix(resolved) if exact else None
+    ctx = _base_context(active="compare", part=resolved or query)
+    ctx.update(
+        {
+            "query_part": query,
+            "resolved_part": resolved,
+            "exact_match": exact,
+            "price_compare": compared,
+            "compare_matrix": matrix,
+        }
+    )
+    return ctx
+
+
+def build_charts_context(part: str = "") -> dict[str, object]:
+    rows = _load_stock_rows()
+    query = part.strip()
+    resolved = resolve_part(query, rows) if query else None
+    needle = _norm_part(resolved or "")
+    focused = [row for row in rows if needle and _norm_part(row.get("part_number")) == needle]
+    scatter_source = focused if resolved else rows
+    ctx = _base_context(active="charts", part=resolved or query)
+    ctx.update(
+        {
+            "query_part": query,
+            "resolved_part": resolved,
+            "chart_payload": chart_payload(scatter_source),
+        }
+    )
+    return ctx
+
+
+def build_reports_context() -> dict[str, object]:
+    reports = list_report_files()
+    ctx = _base_context(active="reports")
+    ctx.update({"reports": reports})
+    return ctx
+
+
+def render_finder_html(filters: dict[str, str] | None = None) -> str:
+    return _jinja().get_template("finder.html").render(**build_finder_context(filters))
+
+
+def render_compare_html(part: str = "") -> str:
+    return _jinja().get_template("compare.html").render(**build_compare_context(part))
+
+
+def render_charts_html(part: str = "") -> str:
+    return _jinja().get_template("charts.html").render(**build_charts_context(part))
+
+
+def render_reports_html() -> str:
+    return _jinja().get_template("reports.html").render(**build_reports_context())
+
+
 def render_demo_html(query_part: str = "") -> str:
-    return _jinja().get_template("demo.html").render(**build_demo_context(query_part))
+    """Backward-compatible alias for tests that open compare by part."""
+    return render_compare_html(query_part)
 
 
 class DemoHandler(BaseHTTPRequestHandler):
@@ -201,9 +214,27 @@ class DemoHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         route = unquote(parsed.path)
+        qs = parse_qs(parsed.query)
+
         if route in {"/", "/index.html"}:
-            query_part = (parse_qs(parsed.query).get("part") or [""])[0]
-            body = render_demo_html(query_part).encode("utf-8")
+            self._redirect("/finder")
+            return
+        if route == "/finder":
+            body = render_finder_html(_parse_filters(qs)).encode("utf-8")
+            self._send(200, "text/html; charset=utf-8", body)
+            return
+        if route == "/compare":
+            query_part = (qs.get("part") or qs.get("id") or [""])[0]
+            body = render_compare_html(query_part).encode("utf-8")
+            self._send(200, "text/html; charset=utf-8", body)
+            return
+        if route == "/charts":
+            query_part = (qs.get("part") or [""])[0]
+            body = render_charts_html(query_part).encode("utf-8")
+            self._send(200, "text/html; charset=utf-8", body)
+            return
+        if route == "/reports":
+            body = render_reports_html().encode("utf-8")
             self._send(200, "text/html; charset=utf-8", body)
             return
         if route == "/healthz":
@@ -220,6 +251,12 @@ class DemoHandler(BaseHTTPRequestHandler):
             self._send(200, mime or "application/octet-stream", data)
             return
         self._send(404, "text/plain; charset=utf-8", b"not found")
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send(self, code: int, content_type: str, body: bytes) -> None:
         self.send_response(code)

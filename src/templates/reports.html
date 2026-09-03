@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}DP32 — отчёты{% endblock %}
+{% block lead %}Архив PDF/HTML-отчётов пайплайна (Flash/RAM, KNN). Не связан с выбором МК на демо.{% endblock %}
+
+{% block content %}
+<section id="reports">
+  <h2>Отчёты пайплайна</h2>
+  {% if reports %}
+  <table>
+    <thead><tr><th>Файл</th><th>Тип</th><th>Размер</th></tr></thead>
+    <tbody>
+      {% for item in reports %}
+      <tr>
+        <td><a href="{{ item.href }}">{{ item.name }}</a></td>
+        <td>{{ item.kind }}</td>
+        <td>{{ item.size_kb }} KB</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Папка reports пуста. На сервере выполните <code>python src/pipeline.py</code>.</p>
+  {% endif %}
+</section>
+{% endblock %}

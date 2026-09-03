@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}DP32 — выбор МК{% endblock %}
+{% block lead %}Подбор микроконтроллера по универсальным параметрам каталога ЧипДип / Платан / Промэлектроника.{% endblock %}
+
+{% block content %}
+<section id="finder">
+  <h2>Умный выбор МК</h2>
+  <p class="muted">Задайте фильтры — в таблице останутся уникальные артикулы. «Сравнить» откроет цену и наличие по трём стокам.</p>
+  <form class="filters" method="get" action="/finder">
+    <label>Артикул
+      <input name="part" type="search" value="{{ filters.part }}" placeholder="STM32F103C8T6">
+    </label>
+    <label>Номенклатурный №
+      <input name="nomenclature" type="search" value="{{ filters.nomenclature }}" placeholder="126937">
+    </label>
+    <label>Бренд
+      <select name="brand">
+        <option value="">все</option>
+        {% for item in facet_brands %}
+        <option value="{{ item }}" {% if filters.brand == item %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Ядро
+      <select name="core">
+        <option value="">все</option>
+        {% for item in facet_cores %}
+        <option value="{{ item }}" {% if filters.core == item %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Корпус
+      <select name="package">
+        <option value="">все</option>
+        {% for item in facet_packages %}
+        <option value="{{ item }}" {% if filters.package == item %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Flash от KB
+      <input name="flash_min" type="number" min="0" value="{{ filters.flash_min }}" style="width:5rem">
+    </label>
+    <label>до
+      <input name="flash_max" type="number" min="0" value="{{ filters.flash_max }}" style="width:5rem">
+    </label>
+    <label>Частота от MHz
+      <input name="freq_min" type="number" min="0" value="{{ filters.freq_min }}" style="width:5rem">
+    </label>
+    <label>до
+      <input name="freq_max" type="number" min="0" value="{{ filters.freq_max }}" style="width:5rem">
+    </label>
+    <label>Температура
+      <input name="temp" type="search" value="{{ filters.temp }}" placeholder="-40">
+    </label>
+    <button type="submit">Применить</button>
+    <a href="/finder">Сбросить</a>
+  </form>
+  {% if finder_rows %}
+  <div class="matrix-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Номенклатурный №</th>
+          <th>Артикул</th>
+          <th>Бренд</th>
+          <th>Ядро</th>
+          <th>Частота</th>
+          <th>Flash</th>
+          <th>Темп. диапазон</th>
+          <th>Корпус</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in finder_rows %}
+        <tr>
+          <td>{{ row.nomenclature_id or "—" }}</td>
+          <td>{{ row.part_number }}</td>
+          <td>{{ row.brand if row.brand and row.brand != 'unknown' else "—" }}</td>
+          <td>{{ row.core_arch or "—" }}</td>
+          <td>{% if row.freq_mhz %}{{ row.freq_mhz }} MHz{% else %}—{% endif %}</td>
+          <td>{% if row.flash_kb %}{{ row.flash_kb }} KB{% else %}—{% endif %}</td>
+          <td>{{ row.temp_range if row.temp_range and row.temp_range != 'unknown' else "—" }}</td>
+          <td>{{ row.package or "—" }}</td>
+          <td><a href="/compare?part={{ row.part_number }}">Сравнить</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Найдено артикулов: {{ finder_rows|length }}</p>
+  {% else %}
+  <p class="muted">По заданным фильтрам ничего не найдено.</p>
+  {% endif %}
+</section>
+{% endblock %}
