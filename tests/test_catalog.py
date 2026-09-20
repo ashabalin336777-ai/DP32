@@ -29,7 +29,7 @@ def test_product_cards_expose_card_ids() -> None:
     assert cards[("Промэлектроника", "STM32F103C8T6")]["card_id"] == "126937"
     assert cards[("Платан", "STM32F103C8T6")]["card_id"] == "2015361529"
     assert cards[("ЧипДип", "STM32F411CEU6")]["card_id"] == "9000372706"
-    assert cards[("ЧипДип", "STM32F103C8T6")]["card_id"] == ""
+    assert cards[("ЧипДип", "STM32F103C8T6")]["card_id"] == "9000099899"
 
 
 def test_search_by_card_id_resolves_mpn() -> None:
@@ -37,10 +37,12 @@ def test_search_by_card_id_resolves_mpn() -> None:
     assert search_part_numbers("126937", rows) == ["STM32F103C8T6"]
     assert search_part_numbers("2015361529", rows) == ["STM32F103C8T6"]
     assert search_part_numbers("9000372706", rows) == ["STM32F411CEU6"]
+    assert search_part_numbers("9000099899", rows) == ["STM32F103C8T6"]
     assert search_part_numbers("159744", rows) == ["STM32F411CEU6"]
     assert search_part_numbers("2011485871", rows) == ["STM32F411CEU6"]
     assert resolve_part("126937", rows) == "STM32F103C8T6"
     assert resolve_part("9000372706", rows) == "STM32F411CEU6"
+    assert resolve_part("9000099899", rows) == "STM32F103C8T6"
 
 
 def test_search_by_product_url() -> None:

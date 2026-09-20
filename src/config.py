@@ -54,10 +54,12 @@ class Settings:
     connect_timeout_sec: float = CONNECT_TIMEOUT_SEC
     html_window_chars: int = HTML_WINDOW_CHARS
     scrape_warmup_delay_sec: float = 2.5
-    scrape_403_backoff_sec: float = 8.0
+    scrape_403_backoff_sec: float = 12.0
     scrape_cache_ttl_sec: int = 86400
     search_web_enabled: bool = True
-    search_web_limit: int = 5
+    search_web_limit: int = 3
+    search_web_delay_sec: float = 2.0
+    search_web_max_parts: int = 2
     search_web_url: str = ""
     search_web_query: str = "{part} {competitor} купить микроконтроллер"
 
@@ -94,7 +96,7 @@ def get_settings() -> Settings:
         scrape_delay_sec=float(os.getenv("SCRAPE_DELAY_SEC", "5")),
         scrape_timeout_ms=int(os.getenv("SCRAPE_TIMEOUT_MS", "120000")),
         scrape_warmup_delay_sec=float(os.getenv("SCRAPE_WARMUP_DELAY_SEC", "2.5")),
-        scrape_403_backoff_sec=float(os.getenv("SCRAPE_403_BACKOFF_SEC", "8")),
+        scrape_403_backoff_sec=float(os.getenv("SCRAPE_403_BACKOFF_SEC", "12")),
         scrape_cache_ttl_sec=int(os.getenv("SCRAPE_CACHE_TTL_SEC", "86400")),
         scrape_targets_path=_as_path(
             os.getenv("SCRAPE_TARGETS_PATH", ""), "data/scrape_targets.json"
@@ -111,7 +113,9 @@ def get_settings() -> Settings:
         price_dis_threshold=float(os.getenv("PRICE_DIS_THRESHOLD", "5.0")),
         search_web_enabled=os.getenv("SEARCH_WEB", "on").strip().lower()
         not in {"0", "off", "false", "no"},
-        search_web_limit=int(os.getenv("SEARCH_WEB_LIMIT", "5")),
+        search_web_limit=int(os.getenv("SEARCH_WEB_LIMIT", "3")),
+        search_web_delay_sec=float(os.getenv("SEARCH_WEB_DELAY_SEC", "2")),
+        search_web_max_parts=int(os.getenv("SEARCH_WEB_MAX_PARTS", "2")),
         search_web_url=os.getenv("NEURAL_DEEP_SEARCH_WEB_URL", ""),
         search_web_query=os.getenv(
             "SEARCH_WEB_QUERY",

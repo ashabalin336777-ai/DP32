@@ -164,10 +164,15 @@ git pull --ff-only origin main
 
 # 2) Ключ и флаги поиска (один раз или проверить)
 test -f .env || cp .env.example .env
-grep -E '^(NEURAL_DEEP_API_KEY|SEARCH_WEB)=' .env
+grep -E '^(NEURAL_DEEP_API_KEY|SEARCH_WEB|SEARCH_WEB_LIMIT|SEARCH_WEB_MAX_PARTS|SEARCH_WEB_DELAY_SEC|SCRAPE_403_BACKOFF_SEC)=' .env || true
 # если ключа нет: вписать NEURAL_DEEP_API_KEY=sk-...
 # SEARCH_WEB=on  — искать URL через Neural Deep
 # SEARCH_WEB=off — только scrape_targets.json
+# Рекомендуемые анти-429 (дописать, если строк нет):
+grep -q '^SEARCH_WEB_LIMIT=' .env || echo 'SEARCH_WEB_LIMIT=3' >> .env
+grep -q '^SEARCH_WEB_MAX_PARTS=' .env || echo 'SEARCH_WEB_MAX_PARTS=2' >> .env
+grep -q '^SEARCH_WEB_DELAY_SEC=' .env || echo 'SEARCH_WEB_DELAY_SEC=2' >> .env
+grep -q '^SCRAPE_403_BACKOFF_SEC=' .env || echo 'SCRAPE_403_BACKOFF_SEC=12' >> .env
 
 # 3) Образ и контейнеры
 docker compose up -d --build

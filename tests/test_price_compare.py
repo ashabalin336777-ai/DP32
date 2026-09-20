@@ -50,7 +50,7 @@ def test_product_cards_cover_three_competitors() -> None:
     assert "https://www.promelec.ru/product/126937/" in urls
     assert "https://www.chipdip.ru/product/stm32f411ceu6-mikrokontroller-32-bit-st-microelectronics-9000372706" in urls
     ids = {item["card_id"] for item in cards if item["card_id"]}
-    assert {"126937", "2015361529", "9000372706", "159744", "2011485871"} <= ids
+    assert {"126937", "2015361529", "9000372706", "9000099899", "159744", "2011485871"} <= ids
 
 
 def test_competitor_tables_have_source_links() -> None:

@@ -20,6 +20,14 @@
       "competitor": "ЧипДип",
       "slug": "chipdip",
       "kind": "product",
+      "url": "https://www.chipdip.ru/product/stm32f103c8t6-mikrokontroller-32-bit-st-microelectronics-9000099899",
+      "fixture": "data/chipdip_catalog.html",
+      "ready_selector": "h1, .product, table"
+    },
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "kind": "product",
       "url": "https://www.chipdip.ru/product/stm32f411ceu6-mikrokontroller-32-bit-st-microelectronics-9000372706",
       "fixture": "data/chipdip_catalog.html",
       "ready_selector": "h1, .product, table"
@@ -28,22 +36,25 @@
       "competitor": "Платан",
       "slug": "platan",
       "kind": "listing",
-      "url": "https://www.platan.ru/cgi-bin/qwery_p.pl?idc=100011&idv=stm32",
-      "fixture": "data/platan_catalog.html"
+      "url": "https://www.platan.ru/shop/hits/stm32f103",
+      "fixture": "data/platan_catalog.html",
+      "ready_selector": "table, .name, h1"
     },
     {
       "competitor": "Платан",
       "slug": "platan",
       "kind": "product",
       "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2015361529",
-      "fixture": "data/platan_catalog.html"
+      "fixture": "data/platan_catalog.html",
+      "ready_selector": "h1, table, .name"
     },
     {
       "competitor": "Платан",
       "slug": "platan",
       "kind": "product",
       "url": "https://www.platan.ru/cgi-bin/qwery.pl/id=2011485871",
-      "fixture": "data/platan_catalog.html"
+      "fixture": "data/platan_catalog.html",
+      "ready_selector": "h1, table, .name"
     },
     {
       "competitor": "Промэлектроника",

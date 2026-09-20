@@ -158,7 +158,7 @@ def test_extract_chipdip_listing_row_not_neighbor() -> None:
     ).read_text(encoding="utf-8")
     specs = extract_by_selectors(html)
     parts = {item.part_number: item for item in specs}
-    assert set(parts) == {"STM32F103C8T6"}
+    assert "STM32F103C8T6" in parts
     f103 = parts["STM32F103C8T6"]
     assert f103.core_arch == "Cortex-M3"
     assert f103.flash_kb == 64
@@ -167,7 +167,9 @@ def test_extract_chipdip_listing_row_not_neighbor() -> None:
     assert f103.package == "LQFP-48"
     assert f103.price_rub == 160
     assert f103.stock_qty == 3646
-
+    # Neighbor MCU rows must not overwrite F103C8T6 stock/price.
+    if "STM32F103CBT6" in parts:
+        assert parts["STM32F103CBT6"].stock_qty != f103.stock_qty
 
 def test_extract_promelec_product_in_stock_price() -> None:
     html = (
@@ -186,7 +188,7 @@ def test_extract_promelec_product_in_stock_price() -> None:
     assert f103.stock_qty == 31542
 
 
-def test_extract_promelec_listing_skips_from_price() -> None:
+def test_extract_promelec_listing_accepts_from_price() -> None:
     html = (
         Path(__file__).resolve().parent / "fixtures" / "promelec_listing_f103.html"
     ).read_text(encoding="utf-8")
@@ -197,7 +199,7 @@ def test_extract_promelec_listing_skips_from_price() -> None:
     assert f103.stock_qty == 31542
     assert f103.flash_kb == 64
     assert f103.ram_kb == 20
-    assert f103.price_rub == 0
+    assert f103.price_rub == 111.82
 
 
 def test_extract_specs_many_uses_selectors_without_articles() -> None:
@@ -210,4 +212,5 @@ def test_extract_specs_many_uses_selectors_without_articles() -> None:
             raise AssertionError("LLM must not run when selectors match")
 
     specs = extract_specs_many(html, extractor=Boom())  # type: ignore[arg-type]
-    assert specs[0].stock_qty == 3646
+    by_part = {spec.part_number: spec for spec in specs}
+    assert by_part["STM32F103C8T6"].stock_qty == 3646

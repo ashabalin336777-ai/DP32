@@ -1,5 +1,14 @@
 {
-  "our_parts": ["STM32F103C8T6", "STM32F411CEU6"],
+  "our_parts": [
+    "STM32F103C8T6",
+    "STM32F411CEU6",
+    "STM32F103CBT6",
+    "STM32F407VGT6",
+    "STM32F107VCT6",
+    "STM32F030K6T6",
+    "STM32F030F4P6TR",
+    "APM32F030K6T6"
+  ],
   "sites": {
     "chipdip": {
       "listing": {
@@ -37,7 +46,8 @@
         "stock_label": ".table-list__mob-title",
         "stock_value": ".table-list__counter",
         "stock_name": "Наличие",
-        "price": ".price-from-1, .warehouse-instock .price-from-1"
+        "price": ".table-list__price, .price-from-1, .warehouse-instock .price-from-1",
+        "accept_from_price": true
       },
       "product": {
         "part": "h1, .product-name, [itemprop=name]",

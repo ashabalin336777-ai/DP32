@@ -139,7 +139,15 @@ def search_web(
             if "HTTP 429" in str(exc):
                 write_alert(f"429 Too Many Requests search:web attempt={attempt + 1}")
             if retryable and attempt < cfg.llm_max_retries - 1:
-                delay = 2**attempt
+                delay = float(2**attempt)
+                if "HTTP 429" in str(exc):
+                    # Budget tier: stretch 429 backoff beyond plain 2**n.
+                    delay = float(2 ** (attempt + 2))
+                    if cfg.search_web_delay_sec > 0:
+                        delay = max(
+                            delay,
+                            cfg.search_web_delay_sec * (attempt + 1) * 2,
+                        )
                 _logger().warning(
                     "retryable search:web attempt=%s sleep=%ss: %s",
                     attempt + 1,
@@ -229,8 +237,12 @@ def discover_scrape_targets(
     settings: Settings | None = None,
     searcher: Callable[[str], list[SearchHit]] | None = None,
     static_targets: list[ScrapeTarget] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> list[ScrapeTarget]:
-    """search:web for OUR parts on competitor hosts; fall back to scrape_targets.json."""
+    """search:web for OUR parts on competitor hosts; fall back to scrape_targets.json.
+
+    Keeps static listing URLs even when search finds product cards (hybrid).
+    """
     cfg = settings or get_settings()
     static = static_targets if static_targets is not None else load_targets()
     if not cfg.search_web_ready:
@@ -238,21 +250,25 @@ def discover_scrape_targets(
         return static
 
     hosts = competitor_hosts(static)
-    parts = our_part_numbers(static)
+    parts = our_part_numbers(static)[: max(0, cfg.search_web_max_parts)]
     found: list[ScrapeTarget] = []
-    seen: set[str] = set()
+    seen: set[str] = {item.url for item in static if item.url.startswith("http")}
 
     def _search(query: str) -> list[SearchHit]:
         if searcher is not None:
             return searcher(query)
         return search_web(query, settings=cfg)
 
+    search_calls = 0
     for competitor, host in hosts.items():
         if competitor not in ALLOWED_COMPETITORS or competitor == OUR:
             continue
         for part in parts:
+            if search_calls > 0 and cfg.search_web_delay_sec > 0:
+                sleeper(cfg.search_web_delay_sec)
             query = cfg.search_web_query.format(part=part, competitor=competitor)
             url = pick_product_url(_search(query), host)
+            search_calls += 1
             if not url or url in seen:
                 continue
             seen.add(url)
@@ -266,6 +282,7 @@ def discover_scrape_targets(
                     url=url,
                     fixture=_fixture_for(competitor, static),
                     ready_selector=_ready_for(competitor, static),
+                    kind="product",
                 )
             )
             _logger().info("search:web picked %s %s -> %s", competitor, part, url)
@@ -274,5 +291,10 @@ def discover_scrape_targets(
         _logger().warning("search:web found no product URLs — using scrape_targets.json")
         return static
 
-    ours = [item for item in static if item.competitor == OUR]
-    return ours + found
+    # Hybrid: OUR + listings from static + discovered product cards.
+    kept = [
+        item
+        for item in static
+        if item.competitor == OUR or item.kind == "listing"
+    ]
+    return kept + found

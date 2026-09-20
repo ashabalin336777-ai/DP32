@@ -40,6 +40,23 @@ from src.config import (  # noqa: E402
 )
 
 SELECTORS_PATH = ROOT / "data" / "extract_selectors.json"
+_MCU_PART_RE = re.compile(
+    r"\b("
+    r"STM32[A-Z0-9\-]+|"
+    r"STM8[A-Z0-9\-]+|"
+    r"AT32[A-Z0-9\-]+|"
+    r"APM32[A-Z0-9\-]+|"
+    r"GD32[A-Z0-9\-]+|"
+    r"CH32[A-Z0-9\-]+|"
+    r"ATSAM[A-Z0-9\-]+|"
+    r"ATMEGA[A-Z0-9\-]+|"
+    r"ATTINY[A-Z0-9\-]+|"
+    r"PIC1[0-9][A-Z0-9\-/]+|"
+    r"N76E[A-Z0-9\-]+|"
+    r"STC[0-9][A-Z0-9\-]+"
+    r")\b",
+    re.I,
+)
 
 EXTRACT_SYSTEM_PROMPT = """You extract microcontroller catalog specs from HTML.
 Return only fields from the provided JSON schema.
@@ -434,6 +451,21 @@ def _find_our_part(text: str, our: dict[str, str]) -> str | None:
     return hits[0] if hits else None
 
 
+def _discover_mcu_part(text: str) -> str | None:
+    match = _MCU_PART_RE.search(text or "")
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _resolve_part_number(text: str, our: dict[str, str]) -> str | None:
+    """Prefer OUR whitelist match, otherwise discover MCU-like MPN on the page."""
+    hit = _find_our_part(text, our)
+    if hit:
+        return hit
+    return _discover_mcu_part(text)
+
+
 def _detect_site(html: str, config: dict[str, Any]) -> str | None:
     window = html[:12_000].casefold()
     for name in config.get("sites") or {}:
@@ -477,7 +509,8 @@ def _fill_direct_fields(fields: dict[str, object], node: Tag, profile: dict[str,
         if not text:
             continue
         if field == "price_rub" and text.casefold().startswith("от"):
-            continue
+            if not bool(profile.get("accept_from_price")):
+                continue
         number = _first_number(text)
         if kind == str:
             fields[field] = text
@@ -539,7 +572,7 @@ def _extract_listing(
     seen: set[str] = set()
     for item in _select(soup, str(profile.get("item") or "")):
         part_node = _first_select(item, str(profile.get("part") or ""))
-        part = _find_our_part(_visible(part_node or item), our)
+        part = _resolve_part_number(_visible(part_node or item), our)
         if part is None or part in seen:
             continue
         fields = _empty_fields()
@@ -560,7 +593,10 @@ def _extract_product(
     our: dict[str, str],
 ) -> list[MCUExtractSpec]:
     part_node = _first_select(soup, str(profile.get("part") or "h1"))
-    part = _find_our_part(_visible(part_node) or _visible(soup.body if isinstance(soup.body, Tag) else None), our)
+    part = _resolve_part_number(
+        _visible(part_node) or _visible(soup.body if isinstance(soup.body, Tag) else None),
+        our,
+    )
     if part is None:
         return []
     fields = _empty_fields()
@@ -579,8 +615,6 @@ def extract_by_selectors(html: str, site: str | None = None) -> list[MCUExtractS
     """Parse live competitor pages using CSS selectors from extract_selectors.json."""
     config = load_extract_selectors()
     our = _our_parts(config)
-    if not our:
-        return []
     name = site or _detect_site(html, config)
     sites = config.get("sites") or {}
     profile_set = sites.get(name or "") if name else None

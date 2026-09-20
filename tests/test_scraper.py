@@ -41,6 +41,12 @@ def _settings(tmp_path: Path, **overrides: object) -> Settings:
         "web_port": 8080,
         "price_adv_threshold": 5.0,
         "price_dis_threshold": 5.0,
+        "search_web_enabled": True,
+        "search_web_limit": 3,
+        "search_web_delay_sec": 0.0,
+        "search_web_max_parts": 2,
+        "search_web_url": "",
+        "search_web_query": "{part} {competitor} купить микроконтроллер",
     }
     values.update(overrides)
     settings = Settings(**values)  # type: ignore[arg-type]
@@ -97,7 +103,8 @@ def test_fetch_retries_once_after_403(tmp_path: Path, monkeypatch) -> None:
     settings = _settings(tmp_path)
     monkeypatch.setattr("src.scraper.get_settings", lambda: settings)
     sleeps: list[float] = []
-    page = FakePage([200, 403, 200])
+    # warmup ok, target 403, re-warmup ok, retry 200
+    page = FakePage([200, 403, 200, 200])
     target = ScrapeTarget(
         competitor="ЧипДип",
         slug="chipdip",
@@ -115,19 +122,38 @@ def test_fetch_retries_once_after_403(tmp_path: Path, monkeypatch) -> None:
     )
     assert "ok" in html
     assert sleeps == [8.0]
-    assert page.gotos[0] == "https://www.chipdip.ru/"
-    assert page.gotos[1:] == [
+    assert page.gotos == [
+        "https://www.chipdip.ru/",
         "https://www.chipdip.ru/catalog/popular/stm32f103",
+        "https://www.chipdip.ru/",
         "https://www.chipdip.ru/catalog/popular/stm32f103",
     ]
     assert page.header_sets
     assert page.header_sets[0]["Referer"] == "https://www.chipdip.ru/"
 
 
-def test_fetch_second_403_raises(tmp_path: Path, monkeypatch) -> None:
+def test_fetch_second_403_uses_cache(tmp_path: Path, monkeypatch) -> None:
     settings = _settings(tmp_path, scrape_403_backoff_sec=1)
     monkeypatch.setattr("src.scraper.get_settings", lambda: settings)
-    page = FakePage([200, 403, 403])
+    cache = diskcache.Cache(str(tmp_path / "html"))
+    url = "https://www.chipdip.ru/product/x"
+    write_html_cache(url, "<html>cached 403</html>", settings=settings, cache=cache)
+    page = FakePage([200, 403, 200, 403])
+    target = ScrapeTarget(
+        competitor="ЧипДип",
+        slug="chipdip",
+        url=url,
+    )
+    html = asyncio.run(
+        _fetch_with_page(page, target, settings, lambda _s: None, set(), cache=cache)
+    )
+    assert html == "<html>cached 403</html>"
+
+
+def test_fetch_second_403_raises_without_cache(tmp_path: Path, monkeypatch) -> None:
+    settings = _settings(tmp_path, scrape_403_backoff_sec=1)
+    monkeypatch.setattr("src.scraper.get_settings", lambda: settings)
+    page = FakePage([200, 403, 200, 403])
     target = ScrapeTarget(
         competitor="ЧипДип",
         slug="chipdip",

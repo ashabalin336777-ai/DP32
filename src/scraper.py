@@ -240,9 +240,11 @@ async def _warmup_origin(
     warmed: set[str],
     settings: Settings,
     sleeper: SleepFn,
+    *,
+    force: bool = False,
 ) -> None:
     logger = get_scraper_logger()
-    if origin in warmed:
+    if origin in warmed and not force:
         return
     try:
         await page.goto(
@@ -317,11 +319,14 @@ async def _fetch_with_page(
     status = _response_status(response)
     if status == 403:
         logger.warning(
-            "HTTP 403 for %s, backoff %ss then retry once",
+            "HTTP 403 for %s, re-warmup + backoff %ss then retry once",
             target.url,
             settings.scrape_403_backoff_sec,
         )
         await _maybe_sleep(sleeper, settings.scrape_403_backoff_sec)
+        await _warmup_origin(
+            page, origin, warmed, settings, sleeper, force=True
+        )
         try:
             response = await _goto_document(
                 page,
@@ -336,6 +341,11 @@ async def _fetch_with_page(
                 return cached
             raise
         status = _response_status(response)
+        if status == 403:
+            cached = read_html_cache(target.url, settings=settings, cache=cache)
+            if cached is not None:
+                logger.info("403 after retry, using html cache: %s", target.url)
+                return cached
     if status is not None and status >= 400:
         raise RuntimeError(f"HTTP {status} for {target.url}")
     html = await page.content()
@@ -346,18 +356,31 @@ async def _fetch_with_page(
     return str(html)
 
 
+_STEALTH_INIT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru', 'en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+"""
+
+
 async def _launch_context(settings: Settings) -> tuple[Any, Any, Any]:
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(
         headless=True,
-        args=["--disable-blink-features=AutomationControlled"],
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--lang=ru-RU",
+        ],
     )
     context = await browser.new_context(
         user_agent=settings.user_agent,
         locale="ru-RU",
+        timezone_id="Europe/Moscow",
         viewport={"width": 1366, "height": 768},
         extra_http_headers=browser_headers(),
     )
+    if hasattr(context, "add_init_script"):
+        await context.add_init_script(_STEALTH_INIT)
     return playwright, browser, context
 
 

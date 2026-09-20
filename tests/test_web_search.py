@@ -32,7 +32,9 @@ def _settings(tmp_path: Path, **overrides: object) -> Settings:
         "price_adv_threshold": 5.0,
         "price_dis_threshold": 5.0,
         "search_web_enabled": True,
-        "search_web_limit": 5,
+        "search_web_limit": 3,
+        "search_web_delay_sec": 0.0,
+        "search_web_max_parts": 2,
         "search_web_url": "",
         "search_web_query": "{part} {competitor} купить микроконтроллер",
     }
@@ -67,7 +69,7 @@ def test_search_web_parses_results(tmp_path: Path) -> None:
     def poster(url: str, key: str, query: str, limit: int, timeout: float) -> tuple[int, dict]:
         assert url.endswith("/search/web")
         assert query == "STM32F103C8T6 ЧипДип купить микроконтроллер"
-        assert limit == 5
+        assert limit == 3
         return 200, {
             "results": [
                 {
@@ -103,8 +105,41 @@ def test_search_web_retries_on_429(tmp_path: Path) -> None:
         poster=poster,
     )
     assert hits[0].url.endswith("id=1")
-    assert sleeps == [1]
+    assert sleeps == [4.0]
     assert calls["n"] == 2
+
+
+def test_discover_keeps_listings_with_found_products(tmp_path: Path) -> None:
+    static = [
+        ScrapeTarget(
+            competitor="ЧипДип",
+            slug="chipdip",
+            kind="listing",
+            url="https://www.chipdip.ru/catalog/popular/stm32f103",
+            fixture="data/chipdip_catalog.html",
+        ),
+        ScrapeTarget(
+            competitor="OUR",
+            slug="our",
+            url="data/our_catalog.html",
+            fixture="data/our_catalog.html",
+        ),
+    ]
+
+    def searcher(query: str) -> list[SearchHit]:
+        return [
+            SearchHit("F103", "https://www.chipdip.ru/product/stm32f103c8t6", ""),
+        ]
+
+    targets = discover_scrape_targets(
+        settings=_settings(tmp_path),
+        searcher=searcher,
+        static_targets=static,
+    )
+    urls = [item.url for item in targets]
+    assert "data/our_catalog.html" in urls
+    assert "https://www.chipdip.ru/catalog/popular/stm32f103" in urls
+    assert "https://www.chipdip.ru/product/stm32f103c8t6" in urls
 
 
 def test_pick_product_url_prefers_card_on_same_host() -> None:
