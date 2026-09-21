@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.catalog import enrich_card, extract_card_id, resolve_part, search_part_numbers
 from src.config import ROOT, get_settings
+from src.db import load_latest_snapshot
 from src.extractor import extract_by_rules
 from src.scraper import load_targets, resolve_target_fixture
 
@@ -50,8 +51,14 @@ def competitor_tables(offers: pd.DataFrame | None = None) -> list[dict[str, Any]
         rows: list[dict[str, Any]] = []
         for _, item in subset.iterrows():
             source = card_source(name, str(item.get("part_number", "")))
-            url = "" if source is None else str(source.get("url") or "")
-            card_id = "" if source is None else str(source.get("card_id") or extract_card_id(url))
+            url = str(item.get("source_url") or "")
+            if not url and source is not None:
+                url = str(source.get("url") or "")
+            card_id = ""
+            if source is not None:
+                card_id = str(source.get("card_id") or extract_card_id(url))
+            elif url:
+                card_id = extract_card_id(url)
             nom = str(item.get("nomenclature_id") or "").strip() or card_id
             rows.append(
                 {
@@ -75,8 +82,30 @@ def competitor_tables(offers: pd.DataFrame | None = None) -> list[dict[str, Any]
     return tables
 
 
-def load_catalog_offers() -> pd.DataFrame:
-    """Stock catalogs only. OUR fixtures stay for the PDF pipeline, not the demo."""
+def _empty_offers() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=["part_number", "competitor_name", "price_rub", "core_arch", "stock_qty"]
+    )
+
+
+def _offers_from_snapshot() -> pd.DataFrame:
+    frame = load_latest_snapshot(get_settings().db_path)
+    if frame.empty or "competitor_name" not in frame.columns:
+        return _empty_offers()
+    live = frame.loc[frame["competitor_name"].isin(COMPETITORS)].copy()
+    if live.empty:
+        return _empty_offers()
+    price = pd.to_numeric(live["price_rub"], errors="coerce")
+    live = live.loc[price.fillna(0) > 0]
+    if live.empty:
+        return _empty_offers()
+    stock = pd.to_numeric(live.get("stock_qty"), errors="coerce")
+    live["stock_qty"] = stock.fillna(0)
+    return live
+
+
+def _offers_from_fixtures() -> pd.DataFrame:
+    """Offline HTML catalogs when SQLite snapshot is empty."""
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for target in load_targets():
@@ -101,10 +130,16 @@ def load_catalog_offers() -> pd.DataFrame:
             record["competitor_name"] = target.competitor
             rows.append(record)
     if not rows:
-        return pd.DataFrame(
-            columns=["part_number", "competitor_name", "price_rub", "core_arch", "stock_qty"]
-        )
+        return _empty_offers()
     return pd.DataFrame(rows)
+
+
+def load_catalog_offers() -> pd.DataFrame:
+    """Live SQLite snapshot first; HTML fixtures if the catalog is empty."""
+    live = _offers_from_snapshot()
+    if not live.empty:
+        return live
+    return _offers_from_fixtures()
 
 
 def _norm(value: object) -> str:
@@ -137,8 +172,14 @@ def _search_rows_from_frame(frame: pd.DataFrame) -> list[dict[str, Any]]:
         name = str(item.get("competitor_name") or item.get("competitor") or "")
         part = str(item.get("part_number") or "").strip()
         source = card_source(name, part)
-        url = "" if source is None else str(source.get("url") or "")
-        card_id = "" if source is None else str(source.get("card_id") or extract_card_id(url))
+        url = str(item.get("source_url") or "")
+        if not url and source is not None:
+            url = str(source.get("url") or "")
+        card_id = ""
+        if source is not None:
+            card_id = str(source.get("card_id") or extract_card_id(url))
+        elif url:
+            card_id = extract_card_id(url)
         rows.append(
             {
                 "competitor": name,

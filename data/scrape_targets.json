@@ -60,7 +60,7 @@
       "competitor": "Промэлектроника",
       "slug": "promelec",
       "kind": "listing",
-      "url": "https://www.promelec.ru/catalog/mikroshemy/mikrokontrollery/",
+      "url": "https://www.promelec.ru/catalog/1/11/",
       "fixture": "data/promelec_catalog.html",
       "ready_selector": "h1, .table-list, .product-preview__title, article"
     },

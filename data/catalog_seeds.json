@@ -1,0 +1,48 @@
+{
+  "seeds": [
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "url": "https://www.chipdip.ru/catalog/popular/stm32f103",
+      "pagination": "page",
+      "encoding": "utf-8"
+    },
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "url": "https://www.chipdip.ru/catalog/popular/stm32f4",
+      "pagination": "page",
+      "encoding": "utf-8"
+    },
+    {
+      "competitor": "ЧипДип",
+      "slug": "chipdip",
+      "url": "https://www.chipdip.ru/catalog/popular/atmega",
+      "pagination": "page",
+      "encoding": "utf-8"
+    },
+    {
+      "competitor": "Платан",
+      "slug": "platan",
+      "url": "https://www.platan.ru/cgi-bin/qwery_i.pl?search_group=200152&code=%EC%E8%EA%F0%EE%EA%EE%ED%F2%F0%EE%EB%EB%E5%F0%FB",
+      "pagination": "start",
+      "page_size": 20,
+      "encoding": "cp1251"
+    },
+    {
+      "competitor": "Платан",
+      "slug": "platan",
+      "url": "https://www.platan.ru/shop/200152",
+      "pagination": "start",
+      "page_size": 20,
+      "encoding": "cp1251"
+    },
+    {
+      "competitor": "Промэлектроника",
+      "slug": "promelec",
+      "url": "https://www.promelec.ru/catalog/1/11/",
+      "pagination": "pagen",
+      "encoding": "utf-8"
+    }
+  ]
+}

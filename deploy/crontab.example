@@ -6,7 +6,7 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 MAILTO=""
 
-# Option A (ТЗ): one-shot container each night at 03:00.
+# Option A (ТЗ): one-shot container each night at 03:00 (fast catalog + PDF pipeline).
 # docker-compose.yml must keep `command: sleep infinity` (or not matter for `run --rm`).
 0 3 * * * root cd /opt/dp32 && docker compose run --rm analyzer python src/pipeline.py >> /opt/dp32/logs/cron.log 2>&1
 

@@ -214,3 +214,17 @@ def test_extract_specs_many_uses_selectors_without_articles() -> None:
     specs = extract_specs_many(html, extractor=Boom())  # type: ignore[arg-type]
     by_part = {spec.part_number: spec for spec in specs}
     assert by_part["STM32F103C8T6"].stock_qty == 3646
+
+
+def test_extract_platan_listing_unit_price_and_families() -> None:
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "platan_listing.html"
+    ).read_text(encoding="utf-8")
+    specs = extract_by_selectors(html, site="platan")
+    parts = {item.part_number: item for item in specs}
+    assert parts["STM32F103C8T6"].price_rub == 150.0
+    assert parts["STM32F103C8T6"].stock_qty == 1613
+    assert parts["PIC24FJ256GB106-I/PT"].price_rub == 420.0
+    assert parts["PIC24FJ256GB106-I/PT"].stock_qty == 246
+    assert parts["MSP430F1101AIDWR"].price_rub == 88.0
+    assert parts["MSP430F1101AIDWR"].stock_qty == 925

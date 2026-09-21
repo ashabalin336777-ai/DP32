@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.price_compare import (
     compare_matrix,
     compare_part_prices,
@@ -95,3 +97,60 @@ def test_search_part_numbers_prefix() -> None:
 
     found = search_part_numbers("STM32F103", catalog_rows())
     assert found == ["STM32F103C8T6", "STM32F103CBT6"]
+
+
+def test_load_catalog_offers_prefers_sqlite(tmp_path, monkeypatch) -> None:
+    from src.fast_scraper import CatalogSeed, run_fast_catalog
+    from src.config import Settings
+
+    html = (
+        Path(__file__).resolve().parent / "fixtures" / "platan_listing.html"
+    ).read_text(encoding="utf-8")
+    db_path = tmp_path / "mcu.db"
+    settings = Settings(
+        neural_deep_api_key="",
+        neural_deep_base_url="https://api.neuraldeep.ru/v1",
+        model_extract="qwen2.5-14b-instruct",
+        model_analyze="qwen2.5-32b-instruct",
+        db_path=db_path,
+        report_dir=tmp_path / "reports",
+        log_dir=tmp_path / "logs",
+        cache_dir=tmp_path / "cache",
+        scrape_delay_sec=0.0,
+        scrape_timeout_ms=5000,
+        scrape_targets_path=tmp_path / "targets.json",
+        raw_dir=tmp_path / "raw",
+        user_agent="test-agent",
+        web_host="127.0.0.1",
+        web_port=8080,
+        price_adv_threshold=5.0,
+        price_dis_threshold=5.0,
+    )
+    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("src.price_compare.get_settings", lambda: settings)
+
+    def fetcher(_url: str, _seed: CatalogSeed) -> str:
+        return html
+
+    run_fast_catalog(
+        settings=settings,
+        seeds=[
+            CatalogSeed(
+                "Платан",
+                "platan",
+                "https://www.platan.ru/cgi-bin/qwery_i.pl?search_group=200152",
+            )
+        ],
+        fetcher=fetcher,
+        sleeper=lambda _s: None,
+        max_pages=1,
+        db_path=db_path,
+    )
+    offers = load_catalog_offers()
+    parts = set(offers["part_number"].astype(str))
+    assert "STM32F103C8T6" in parts
+    assert "PIC24FJ256GB106-I/PT" in parts
+    compared = compare_part_prices("STM32F103C8T6", offers)
+    by_name = {row["competitor_name"]: row for row in compared["rows"]}
+    assert by_name["Платан"]["found"] is True
+    assert by_name["Платан"]["price_rub"] == 150.0

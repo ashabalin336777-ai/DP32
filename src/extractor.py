@@ -51,7 +51,11 @@ _MCU_PART_RE = re.compile(
     r"ATSAM[A-Z0-9\-]+|"
     r"ATMEGA[A-Z0-9\-]+|"
     r"ATTINY[A-Z0-9\-]+|"
-    r"PIC1[0-9][A-Z0-9\-/]+|"
+    r"AT89[A-Z0-9\-]+|"
+    r"PIC[0-9]{2}[A-Z0-9\-/]*|"
+    r"MSP430[A-Z0-9\-]*|"
+    r"C8051[A-Z0-9\-]*|"
+    r"LPC[0-9][A-Z0-9.]*|"
     r"N76E[A-Z0-9\-]+|"
     r"STC[0-9][A-Z0-9\-]+"
     r")\b",
@@ -360,6 +364,25 @@ def _first_number(text: str) -> float | None:
     return float(match.group(1).replace(",", "."))
 
 
+def _price_number(text: str, profile: dict[str, Any]) -> float | None:
+    """Unit price from listing cells. Prefer 'от 1 шт' when asked."""
+    folded = text.casefold()
+    if bool(profile.get("price_from_one")):
+        match = re.search(
+            r"(\d[\d\s]*[.,]\d+|\d+)\s*(?:руб|/шт|₽)?\s*от\s*1\b",
+            folded,
+            flags=re.I,
+        )
+        if match:
+            return _first_number(match.group(1))
+        amounts = re.findall(r"(\d[\d\s]*[.,]\d+)\s*/шт", folded)
+        if amounts:
+            return _first_number(amounts[-1])
+    if folded.startswith("от") and not bool(profile.get("accept_from_price")):
+        return None
+    return _first_number(text)
+
+
 def _memory_kb(text: str) -> int:
     match = re.search(r"(\d+(?:[.,]\d+)?)\s*[kк]", text, flags=re.I)
     if match:
@@ -508,9 +531,12 @@ def _fill_direct_fields(fields: dict[str, object], node: Tag, profile: dict[str,
         text = _visible(_first_select(node, selector))
         if not text:
             continue
-        if field == "price_rub" and text.casefold().startswith("от"):
-            if not bool(profile.get("accept_from_price")):
+        if field == "price_rub":
+            number = _price_number(text, profile)
+            if number is None:
                 continue
+            fields[field] = float(number)
+            continue
         number = _first_number(text)
         if kind == str:
             fields[field] = text

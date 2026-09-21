@@ -9,7 +9,7 @@
 
 ## Стек
 
-Python 3.11+ · Pandas · scikit-learn · SQLite · Playwright · Neural Deep Pro (Qwen2.5-14B / 32B) · instructor · Pydantic · Jinja2 · WeasyPrint · Docker
+Python 3.11+ · Pandas · scikit-learn · SQLite · httpx · Playwright · Neural Deep Pro (Qwen2.5-14B / 32B) · instructor · Pydantic · Jinja2 · WeasyPrint · Docker
 
 ## Быстрый старт
 
@@ -24,6 +24,7 @@ copy .env.example .env
 В `.env` укажите `NEURAL_DEEP_API_KEY` — тот же ключ для чата и `search:web`. Ключи в git не попадают. `SEARCH_WEB=off` отключает поиск URL, остаются цели из `data/scrape_targets.json`.
 
 ```powershell
+python src/fast_scraper.py
 python src/pipeline.py
 pytest
 python src/web.py
@@ -57,13 +58,16 @@ python src/web.py
 
 `python src/pipeline.py` — одна команда:
 
-1. Neural Deep `search:web` → URL карточек по артикулам OUR и хостам конкурентов
-2. Playwright → HTML в `data/raw/` (403 — пауза и один повтор; timeout — HTML-кэш; иначе skip)
-3. Парсеры + Агент 1 → SQLite (`upsert_mcu_specs`)
-4. Последний срез `load_latest_snapshot`
-5. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
-6. Дельты `(our - comp) / comp` для цены, Flash, RAM (порог 5%)
-7. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
+1. **fast catalog** (`httpx`) — листинги ЧипДип / Платан / Промэлектроника по `data/catalog_seeds.json`, upsert цены и наличия в SQLite
+2. Neural Deep `search:web` → URL карточек по артикулам OUR и хостам конкурентов
+3. Playwright → HTML карточек в `data/raw/` (403 — пауза и один повтор; timeout — HTML-кэш; иначе skip). Листинги каталога Playwright больше не обходит
+4. Парсеры + Агент 1 → SQLite (`upsert_mcu_specs`)
+5. Последний срез `load_latest_snapshot` (демо `/compare?part=` читает его)
+6. Pin-compatible фильтр + `StandardScaler` + `NearestNeighbors(k=5)`
+7. Дельты `(our - comp) / comp` для цены, Flash, RAM (порог 5%)
+8. Агент 2 + FactValidator → PDF, статус `draft` (Human-in-the-Loop)
+
+Только каталог: `python src/fast_scraper.py` (`FAST_SCRAPE=off` отключает шаг). Платан декодируется как **cp1251**. Пагинация: ChipDip/Promelec `?page=N`, Платан `&start=20`.
 
 Логи: `logs/pipeline.log`, `logs/llm_calls.log`, `logs/alerts.log`. Падение URL в Playwright не останавливает прогон. Retry LLM ≤ 3, затем правила.
 
@@ -73,8 +77,9 @@ python src/web.py
 
 | Модуль | Назначение |
 |--------|------------|
+| `src/fast_scraper.py` | httpx: массовые листинги → SQLite |
 | `src/web_search.py` | Neural Deep `search:web` → URL карточек |
-| `src/scraper.py` | Playwright: HTML в `data/raw/` |
+| `src/scraper.py` | Playwright: HTML карточек в `data/raw/` |
 | `src/extractor.py` | селекторы + LLM → `MCUExtractSpec` |
 | `src/db.py` | SQLite WAL, без ORM |
 | `src/matcher.py` | аналоги и дельты |
@@ -86,7 +91,7 @@ python src/web.py
 | `src/web.py` | демо: `/finder`, `/compare`, `/charts`, отчёты |
 | `src/scheduler.py` | опциональный cron в контейнере |
 
-Гибрид: `search:web` (тот же `NEURAL_DEEP_API_KEY`, `POST {base}/search/web`) находит URL, Playwright качает HTML, парсеры/LLM извлекают поля, Pandas+KNN сравнивают, аналитик пишет отчёт. Без ключа или при `SEARCH_WEB=off` остаются URL из `data/scrape_targets.json`. Хосты конкурентов берутся из этих целей, не из кода. Селекторы: `data/extract_selectors.json`.
+Гибрид: `httpx` наполняет каталог цены/наличия; `search:web` + Playwright — глубокие карточки для PDF. Без ключа или при `SEARCH_WEB=off` остаются URL из `data/scrape_targets.json`. Семена листингов: `data/catalog_seeds.json`. Селекторы: `data/extract_selectors.json`. Демо `/compare?part=STM32F103C8T6` берёт последний SQLite-срез (если пуст — HTML-фикстуры).
 
 Пустой HTML → `0` / `"unknown"` и `llm_confidence < 0.5`. Ниже 0.8 → `needs_review`.
 
@@ -100,7 +105,7 @@ python src/web.py
 pytest
 ```
 
-Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, три страницы демо (`/finder`, `/compare`, `/charts`), `catalog`, `price_compare`, скрейпер (мок заголовков, 403, кэш) и `search:web` (мок HTTP). Живой LLM и сеть не требуются.
+Покрыты экстрактор, матчер, валидатор фактов, SQLite upsert/срез, HTML-отчёт, три страницы демо (`/finder`, `/compare`, `/charts`), `catalog`, `price_compare`, скрейпер (мок заголовков, 403, кэш), `fast_scraper` (пагинация + upsert) и `search:web` (мок HTTP). Живой LLM и сеть не требуются.
 
 ## Деплой на Timeweb VPS
 
@@ -173,6 +178,8 @@ grep -q '^SEARCH_WEB_LIMIT=' .env || echo 'SEARCH_WEB_LIMIT=3' >> .env
 grep -q '^SEARCH_WEB_MAX_PARTS=' .env || echo 'SEARCH_WEB_MAX_PARTS=2' >> .env
 grep -q '^SEARCH_WEB_DELAY_SEC=' .env || echo 'SEARCH_WEB_DELAY_SEC=2' >> .env
 grep -q '^SCRAPE_403_BACKOFF_SEC=' .env || echo 'SCRAPE_403_BACKOFF_SEC=12' >> .env
+grep -q '^FAST_SCRAPE=' .env || echo 'FAST_SCRAPE=on' >> .env
+grep -q '^FAST_SCRAPE_MAX_PAGES=' .env || echo 'FAST_SCRAPE_MAX_PAGES=50' >> .env
 
 # 3) Образ и контейнеры
 docker compose up -d --build
@@ -184,7 +191,8 @@ docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' m
 # 5) Веб жив
 curl -sS http://127.0.0.1:8082/healthz
 
-# 6) Гибридный прогон: search:web → Playwright → extract → SQLite → KNN → отчёт
+# 6) Каталог (httpx) + полный пайплайн
+docker compose run --rm analyzer python src/fast_scraper.py
 docker compose run --rm analyzer python src/pipeline.py
 
 # 7) Публичные страницы
@@ -257,7 +265,7 @@ sudo chmod +x deploy/backup.sh
 
 ## Ограничения MVP
 
-- Листинги конкурентов — это не карточка одной МК; без артикулов в HTML экстрактор может ничего не сохранить.
-- ЧипДип может ответить 403, Платан — таймаутом; пайплайн продолжает работу и отдаёт `draft`.
+- Листинги конкурентов собирает `src/fast_scraper.py` (httpx). Playwright — только карточки/PDF.
+- ЧипДип может ответить 403, Промэлектроника с VPS — капчу; URL пропускается, пайплайн продолжает работу.
 - PDF на Windows без GTK идёт через Playwright; в Linux-образе — WeasyPrint.
 - `force-recreate` веб-контейнера сбрасывает `shastudio_default` — сеть нужно подключить снова.

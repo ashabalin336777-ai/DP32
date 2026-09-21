@@ -62,6 +62,9 @@ class Settings:
     search_web_max_parts: int = 2
     search_web_url: str = ""
     search_web_query: str = "{part} {competitor} купить микроконтроллер"
+    catalog_seeds_path: Path = ROOT / "data" / "catalog_seeds.json"
+    fast_scrape_enabled: bool = True
+    fast_scrape_max_pages: int = 50
 
     @property
     def has_api_key(self) -> bool:
@@ -121,6 +124,12 @@ def get_settings() -> Settings:
             "SEARCH_WEB_QUERY",
             "{part} {competitor} купить микроконтроллер",
         ),
+        catalog_seeds_path=_as_path(
+            os.getenv("CATALOG_SEEDS_PATH", ""), "data/catalog_seeds.json"
+        ),
+        fast_scrape_enabled=os.getenv("FAST_SCRAPE", "on").strip().lower()
+        not in {"0", "off", "false", "no"},
+        fast_scrape_max_pages=int(os.getenv("FAST_SCRAPE_MAX_PAGES", "50")),
     )
     ensure_runtime_dirs(settings)
     return settings

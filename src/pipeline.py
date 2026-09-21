@@ -20,6 +20,7 @@ from src.analyzer import FactStatus, analyze_comparisons  # noqa: E402
 from src.config import get_settings  # noqa: E402
 from src.db import init_db, load_latest_snapshot, upsert_mcu_specs  # noqa: E402
 from src.extractor import SpecExtractor, extract_specs_many  # noqa: E402
+from src.fast_scraper import run_fast_catalog  # noqa: E402
 from src.matcher import match_analogs, save_comparisons, split_snapshot  # noqa: E402
 from src.reporter import render_report  # noqa: E402
 from src.scraper import load_targets, scrape_all  # noqa: E402
@@ -132,11 +133,18 @@ def run_pipeline() -> Path:
     logger.info("pipeline start db=%s", settings.db_path)
     init_db()
 
-    logger.info("step 1/7 search:web")
+    logger.info("step 1/8 fast catalog")
+    if settings.fast_scrape_enabled:
+        catalog_counts = run_fast_catalog()
+        logger.info("fast catalog upsert=%s", catalog_counts)
+    else:
+        logger.info("fast catalog off")
+
+    logger.info("step 2/8 search:web")
     targets = discover_scrape_targets()
     logger.info("scrape targets after search:web=%s", len(targets))
 
-    logger.info("step 2/7 scrape")
+    logger.info("step 3/8 scrape")
     scrape_results = asyncio.run(scrape_all(targets))
     saved = [item.path for item in scrape_results if item.path is not None]
     failed = [item for item in scrape_results if not item.ok]
@@ -144,16 +152,16 @@ def run_pipeline() -> Path:
     for item in failed:
         logger.warning("scrape skip %s: %s", item.target.url, item.error)
 
-    logger.info("step 3/7 extract + upsert")
+    logger.info("step 4/8 extract + upsert")
     upserted = _extract_html_files(logger)
     logger.info("upserted_total=%s", upserted)
 
-    logger.info("step 4/7 load snapshot")
+    logger.info("step 5/8 load snapshot")
     snapshot = load_latest_snapshot()
     our_df, comp_df = split_snapshot(snapshot)
     logger.info("snapshot rows=%s our=%s competitors=%s", len(snapshot), len(our_df), len(comp_df))
 
-    logger.info("step 5/7 match analogs and deltas")
+    logger.info("step 6/8 match analogs and deltas")
     comparisons = match_analogs(snapshot, k=5)
     if not comparisons.empty:
         saved_cmp = save_comparisons(comparisons)
@@ -161,7 +169,7 @@ def run_pipeline() -> Path:
     else:
         logger.warning("no comparisons; report will be empty-data fallback")
 
-    logger.info("step 6-7/7 analyze + render")
+    logger.info("step 7-8/8 analyze + render")
     try:
         draft = analyze_comparisons(comparisons, use_llm=None)
     except Exception as exc:
