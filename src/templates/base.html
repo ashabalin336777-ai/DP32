@@ -95,6 +95,14 @@
     .win { color: var(--win); font-weight: 600; }
     .lose { color: var(--lose); font-weight: 600; }
     .muted { color: var(--muted); }
+    .pager { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+    .pager a, .pager span {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      text-decoration: none;
+      background: var(--panel);
+    }
+    .pager .current { background: var(--our); color: #fff; border-color: var(--our); }
     .chart-box { min-height: 320px; position: relative; }
     a { color: var(--our); }
     footer { color: var(--muted); font-size: 13px; }
@@ -117,7 +125,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    Демо: dp32.shastudio.ru · {{ catalog_count }} артикулов в каталоге
+    Демо: dp32.shastudio.ru · {{ catalog_count }} артикулов · {{ offer_count }} предложений
     {% if selected_part %} · выбрано: <b>{{ selected_part }}</b>{% endif %}
   </footer>
   {% block scripts %}{% endblock %}

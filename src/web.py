@@ -33,6 +33,8 @@ from src.price_compare import (  # noqa: E402
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 ALLOWED_REPORT_SUFFIXES = {".pdf", ".html"}
+FINDER_PAGE_SIZE = 50
+CHART_OVERVIEW_LIMIT = 400
 FILTER_KEYS = (
     "part",
     "nomenclature",
@@ -108,6 +110,56 @@ def _parse_filters(query: dict[str, list[str]]) -> dict[str, str]:
     return {key: (query.get(key) or [""])[0].strip() for key in FILTER_KEYS}
 
 
+def _parse_page(query: dict[str, list[str]]) -> int:
+    raw = (query.get("page") or ["1"])[0].strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 1
+
+
+def paginate_rows(
+    rows: list[dict[str, object]],
+    page: int,
+    *,
+    size: int = FINDER_PAGE_SIZE,
+) -> dict[str, object]:
+    total = len(rows)
+    pages = max(1, (total + size - 1) // size) if total else 1
+    current = min(max(1, page), pages)
+    start = (current - 1) * size
+    return {
+        "finder_rows": rows[start : start + size],
+        "finder_total": total,
+        "finder_page": current,
+        "finder_pages": pages,
+        "finder_page_size": size,
+    }
+
+
+def _filter_query(filters: dict[str, str], *, page: int = 1) -> str:
+    params = {key: value for key, value in filters.items() if value}
+    if page > 1:
+        params["page"] = str(page)
+    return f"?{urlencode(params)}" if params else ""
+
+
+def _limit_chart_points(
+    points: list[dict[str, object]],
+    *,
+    focused: bool,
+    limit: int = CHART_OVERVIEW_LIMIT,
+) -> tuple[list[dict[str, object]], bool]:
+    if focused or len(points) <= limit:
+        return points, False
+    ranked = sorted(
+        points,
+        key=lambda item: float(item.get("stock_qty") or 0),
+        reverse=True,
+    )
+    return ranked[:limit], True
+
+
 def _part_query(part: str) -> str:
     token = part.strip()
     return f"?{urlencode({'part': token})}" if token else ""
@@ -121,21 +173,36 @@ def _base_context(*, active: str, part: str = "") -> dict[str, object]:
         "selected_part": part.strip(),
         "part_qs": _part_query(part),
         "catalog_count": len(parts),
+        "offer_count": len(rows),
     }
 
 
-def build_finder_context(filters: dict[str, str] | None = None) -> dict[str, object]:
+def build_finder_context(
+    filters: dict[str, str] | None = None,
+    page: int = 1,
+) -> dict[str, object]:
     filters = filters or {}
     rows = _load_stock_rows()
     matched = filter_catalog_rows(rows, filters) if any(filters.values()) else merge_unique_parts(rows)
+    matched = sorted(
+        matched,
+        key=lambda row: str(row.get("part_number") or "").casefold(),
+    )
+    pager = paginate_rows(matched, page)
     ctx = _base_context(active="finder")
     ctx.update(
         {
             "filters": filters,
-            "finder_rows": matched,
             "facet_brands": facet_values(rows, "brand"),
             "facet_packages": facet_values(rows, "package"),
             "facet_cores": facet_values(rows, "core_arch"),
+            "finder_prev_href": _filter_query(filters, page=int(pager["finder_page"]) - 1)
+            if int(pager["finder_page"]) > 1
+            else "",
+            "finder_next_href": _filter_query(filters, page=int(pager["finder_page"]) + 1)
+            if int(pager["finder_page"]) < int(pager["finder_pages"])
+            else "",
+            **pager,
         }
     )
     return ctx
@@ -168,12 +235,17 @@ def build_charts_context(part: str = "") -> dict[str, object]:
     needle = _norm_part(resolved or "")
     focused = [row for row in rows if needle and _norm_part(row.get("part_number")) == needle]
     scatter_source = focused if resolved else rows
+    payload, truncated = _limit_chart_points(
+        chart_payload(scatter_source),
+        focused=bool(resolved),
+    )
     ctx = _base_context(active="charts", part=resolved or query)
     ctx.update(
         {
             "query_part": query,
             "resolved_part": resolved,
-            "chart_payload": chart_payload(scatter_source),
+            "chart_payload": payload,
+            "chart_truncated": truncated,
         }
     )
     return ctx
@@ -186,8 +258,8 @@ def build_reports_context() -> dict[str, object]:
     return ctx
 
 
-def render_finder_html(filters: dict[str, str] | None = None) -> str:
-    return _jinja().get_template("finder.html").render(**build_finder_context(filters))
+def render_finder_html(filters: dict[str, str] | None = None, page: int = 1) -> str:
+    return _jinja().get_template("finder.html").render(**build_finder_context(filters, page=page))
 
 
 def render_compare_html(part: str = "") -> str:
@@ -220,7 +292,9 @@ class DemoHandler(BaseHTTPRequestHandler):
             self._redirect("/finder")
             return
         if route == "/finder":
-            body = render_finder_html(_parse_filters(qs)).encode("utf-8")
+            body = render_finder_html(_parse_filters(qs), page=_parse_page(qs)).encode(
+                "utf-8"
+            )
             self._send(200, "text/html; charset=utf-8", body)
             return
         if route == "/compare":

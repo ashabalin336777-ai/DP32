@@ -10,6 +10,7 @@ from src.extractor import (
     extract_by_rules,
     extract_by_selectors,
     extract_specs_many,
+    load_extract_selectors,
 )
 
 
@@ -214,6 +215,34 @@ def test_extract_specs_many_uses_selectors_without_articles() -> None:
     specs = extract_specs_many(html, extractor=Boom())  # type: ignore[arg-type]
     by_part = {spec.part_number: spec for spec in specs}
     assert by_part["STM32F103C8T6"].stock_qty == 3646
+
+
+def test_extract_listing_accepts_generic_mpn() -> None:
+    load_extract_selectors.cache_clear()
+    html = """
+    <html><body>
+    <!-- source_url=https://www.promelec.ru/catalog/1/11/ -->
+    <div class="table-list">
+      <div class="table-list__item">
+        <a class="product-preview__title">ATXMEGA128B1-AUR</a>
+        <div class="table-list__mob-title">Наличие:</div>
+        <div class="table-list__counter"><span>100</span> шт</div>
+        <span class="table-list__price">от 735,15<span class="rub">₽</span></span>
+      </div>
+      <div class="table-list__item">
+        <a class="product-preview__title">ADUC812BSZ-REEL</a>
+        <div class="table-list__mob-title">Наличие:</div>
+        <div class="table-list__counter"><span>121</span> шт</div>
+        <span class="table-list__price">от 1940<span class="rub">₽</span></span>
+      </div>
+    </div>
+    </body></html>
+    """
+    specs = extract_by_selectors(html, site="promelec")
+    parts = {item.part_number: item for item in specs}
+    assert parts["ATXMEGA128B1-AUR"].stock_qty == 100
+    assert parts["ATXMEGA128B1-AUR"].price_rub == 735.15
+    assert parts["ADUC812BSZ-REEL"].stock_qty == 121
 
 
 def test_extract_platan_listing_unit_price_and_families() -> None:

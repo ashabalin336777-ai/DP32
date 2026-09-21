@@ -3,23 +3,10 @@
     {
       "competitor": "ЧипДип",
       "slug": "chipdip",
-      "url": "https://www.chipdip.ru/catalog/popular/stm32f103",
+      "url": "https://www.chipdip.ru/catalog/mikrokontrollery-1738",
       "pagination": "page",
-      "encoding": "utf-8"
-    },
-    {
-      "competitor": "ЧипДип",
-      "slug": "chipdip",
-      "url": "https://www.chipdip.ru/catalog/popular/stm32f4",
-      "pagination": "page",
-      "encoding": "utf-8"
-    },
-    {
-      "competitor": "ЧипДип",
-      "slug": "chipdip",
-      "url": "https://www.chipdip.ru/catalog/popular/atmega",
-      "pagination": "page",
-      "encoding": "utf-8"
+      "encoding": "utf-8",
+      "warmup": "https://www.chipdip.ru/"
     },
     {
       "competitor": "Платан",
@@ -30,18 +17,10 @@
       "encoding": "cp1251"
     },
     {
-      "competitor": "Платан",
-      "slug": "platan",
-      "url": "https://www.platan.ru/shop/200152",
-      "pagination": "start",
-      "page_size": 20,
-      "encoding": "cp1251"
-    },
-    {
       "competitor": "Промэлектроника",
       "slug": "promelec",
       "url": "https://www.promelec.ru/catalog/1/11/",
-      "pagination": "pagen",
+      "pagination": "page",
       "encoding": "utf-8"
     }
   ]

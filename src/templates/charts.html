@@ -17,6 +17,9 @@
 <section id="charts">
   <h2>Позиции на рынке</h2>
   <p class="muted">Chart.js рисует точки; размер считается в Pandas.</p>
+  {% if chart_truncated %}
+  <p class="muted">Показаны {{ chart_payload|length }} точек с наибольшим наличием из {{ offer_count }} предложений.</p>
+  {% endif %}
   <p>Наличие × цена, радиус ~ число штук</p>
   <div class="chart-box"><canvas id="scatter-chart"></canvas></div>
   <script type="application/json" id="chart-payload">{{ chart_payload | tojson }}</script>

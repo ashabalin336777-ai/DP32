@@ -55,7 +55,9 @@
     <button type="submit">Применить</button>
     <a href="/finder">Сбросить</a>
   </form>
+  <p class="muted">В снимке каталога <b>{{ catalog_count }}</b> уникальных артикулов, {{ offer_count }} предложений по стокам.</p>
   {% if finder_rows %}
+  <p>Найдено артикулов: <b>{{ finder_total }}</b>{% if finder_pages > 1 %} · страница {{ finder_page }} из {{ finder_pages }} (по {{ finder_page_size }}){% endif %}</p>
   <div class="matrix-wrap">
     <table>
       <thead>
@@ -88,7 +90,17 @@
       </tbody>
     </table>
   </div>
-  <p class="muted">Найдено артикулов: {{ finder_rows|length }}</p>
+  {% if finder_pages > 1 %}
+  <nav class="pager" aria-label="Страницы каталога">
+    {% if finder_page > 1 %}
+    <a href="/finder{{ finder_prev_href }}">Назад</a>
+    {% endif %}
+    <span class="current">{{ finder_page }} / {{ finder_pages }}</span>
+    {% if finder_next_href %}
+    <a href="/finder{{ finder_next_href }}">Вперёд</a>
+    {% endif %}
+  </nav>
+  {% endif %}
   {% else %}
   <p class="muted">По заданным фильтрам ничего не найдено.</p>
   {% endif %}

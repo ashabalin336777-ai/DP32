@@ -12,15 +12,16 @@
   "sites": {
     "chipdip": {
       "listing": {
-        "item": ".item, .catalog-item, .product-item, tr.with-hover",
-        "part": ".item__name a, .item__name, a.name, a.link, .name a",
+        "item": ".item, .catalog-item, .product-item, tr.with-hover, .nlitem",
+        "part": ".item__name a, .item__name, a.name, a.link, .name a, td.name a, a[href*='/product/']",
         "core": ".item__core",
         "flash": ".item__flash",
         "ram": ".item__ram",
         "freq": ".item__freq",
         "package": ".item__package",
         "price": ".price, .item__price, .price-val",
-        "stock": ".item__avail, .avail, .item-avail, .qty"
+        "stock": ".item__avail, .avail, .item-avail, .qty",
+        "accept_all_parts": true
       },
       "product": {
         "part": "h1, .product__name, .itemname",
@@ -36,7 +37,8 @@
         "price": "td.price, .price",
         "stock": "td.qty, td.sklad, .qty, .avail",
         "accept_from_price": true,
-        "price_from_one": true
+        "price_from_one": true,
+        "accept_all_parts": true
       },
       "product": {
         "part": "h1, .name, td.name, .item-name",
@@ -55,7 +57,8 @@
         "stock_value": ".table-list__counter",
         "stock_name": "Наличие",
         "price": ".table-list__price, .price-from-1, .warehouse-instock .price-from-1",
-        "accept_from_price": true
+        "accept_from_price": true,
+        "accept_all_parts": true
       },
       "product": {
         "part": "h1, .product-name, [itemprop=name]",

@@ -64,7 +64,8 @@ class Settings:
     search_web_query: str = "{part} {competitor} купить микроконтроллер"
     catalog_seeds_path: Path = ROOT / "data" / "catalog_seeds.json"
     fast_scrape_enabled: bool = True
-    fast_scrape_max_pages: int = 50
+    fast_scrape_max_pages: int = 600
+    fast_scrape_delay_sec: float = 1.0
 
     @property
     def has_api_key(self) -> bool:
@@ -129,7 +130,8 @@ def get_settings() -> Settings:
         ),
         fast_scrape_enabled=os.getenv("FAST_SCRAPE", "on").strip().lower()
         not in {"0", "off", "false", "no"},
-        fast_scrape_max_pages=int(os.getenv("FAST_SCRAPE_MAX_PAGES", "50")),
+        fast_scrape_max_pages=int(os.getenv("FAST_SCRAPE_MAX_PAGES", "600")),
+        fast_scrape_delay_sec=float(os.getenv("FAST_SCRAPE_DELAY_SEC", "1")),
     )
     ensure_runtime_dirs(settings)
     return settings

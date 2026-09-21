@@ -95,10 +95,11 @@ def _offers_from_snapshot() -> pd.DataFrame:
     live = frame.loc[frame["competitor_name"].isin(COMPETITORS)].copy()
     if live.empty:
         return _empty_offers()
-    price = pd.to_numeric(live["price_rub"], errors="coerce")
-    live = live.loc[price.fillna(0) > 0]
+    parts = live["part_number"].astype(str).str.strip()
+    live = live.loc[parts.ne("") & parts.str.lower().ne("nan")]
     if live.empty:
         return _empty_offers()
+    live["price_rub"] = pd.to_numeric(live["price_rub"], errors="coerce")
     stock = pd.to_numeric(live.get("stock_qty"), errors="coerce")
     live["stock_qty"] = stock.fillna(0)
     return live

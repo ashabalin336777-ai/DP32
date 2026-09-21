@@ -154,3 +154,58 @@ def test_load_catalog_offers_prefers_sqlite(tmp_path, monkeypatch) -> None:
     by_name = {row["competitor_name"]: row for row in compared["rows"]}
     assert by_name["Платан"]["found"] is True
     assert by_name["Платан"]["price_rub"] == 150.0
+
+
+def test_snapshot_keeps_parts_without_price(tmp_path, monkeypatch) -> None:
+    import pandas as pd
+
+    from src.config import Settings
+    from src.db import init_db, upsert_mcu_specs
+
+    db_path = tmp_path / "mcu.db"
+    settings = Settings(
+        neural_deep_api_key="",
+        neural_deep_base_url="https://api.neuraldeep.ru/v1",
+        model_extract="qwen2.5-14b-instruct",
+        model_analyze="qwen2.5-32b-instruct",
+        db_path=db_path,
+        report_dir=tmp_path / "reports",
+        log_dir=tmp_path / "logs",
+        cache_dir=tmp_path / "cache",
+        scrape_delay_sec=0.0,
+        scrape_timeout_ms=5000,
+        scrape_targets_path=tmp_path / "targets.json",
+        raw_dir=tmp_path / "raw",
+        user_agent="test-agent",
+        web_host="127.0.0.1",
+        web_port=8080,
+        price_adv_threshold=5.0,
+        price_dis_threshold=5.0,
+    )
+    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("src.price_compare.get_settings", lambda: settings)
+    init_db(db_path)
+    upsert_mcu_specs(
+        pd.DataFrame(
+            [
+                {
+                    "part_number": "GD32F103C8T6",
+                    "core_arch": "Cortex-M3",
+                    "flash_kb": 64,
+                    "ram_kb": 20,
+                    "freq_mhz": 72.0,
+                    "package": "LQFP48",
+                    "price_rub": 0,
+                    "stock_qty": 12,
+                    "delivery_days": 0,
+                    "source_url": "https://www.promelec.ru/product/1/",
+                    "scraped_at": "2026-09-21T00:00:00+00:00",
+                }
+            ]
+        ),
+        "Промэлектроника",
+        1.0,
+        db_path=db_path,
+    )
+    offers = load_catalog_offers()
+    assert "GD32F103C8T6" in set(offers["part_number"].astype(str))

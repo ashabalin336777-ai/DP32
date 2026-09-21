@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ class CatalogSeed:
     pagination: str = "page"
     page_size: int = 20
     encoding: str = "utf-8"
+    warmup: str = ""
 
 
 def _logger() -> logging.Logger:
@@ -65,6 +67,7 @@ def load_catalog_seeds(path: Any | None = None) -> list[CatalogSeed]:
                 pagination=str(item.get("pagination") or "page").strip().casefold(),
                 page_size=int(item.get("page_size") or 20),
                 encoding=str(item.get("encoding") or "utf-8").strip(),
+                warmup=str(item.get("warmup") or "").strip(),
             )
         )
     if not seeds:
@@ -88,6 +91,20 @@ def page_url(seed: CatalogSeed, page_index: int) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
+def detect_last_page(html: str, seed: CatalogSeed) -> int | None:
+    """Read the highest page/start index advertised in listing HTML."""
+    if seed.pagination == "start":
+        found = [int(n) for n in re.findall(r"[?&]start=(\d+)", html, flags=re.I)]
+        if not found:
+            return None
+        return max(found) // max(seed.page_size, 1) + 1
+    if seed.pagination == "pagen":
+        found = [int(n) for n in re.findall(r"PAGEN_1=(\d+)", html, flags=re.I)]
+        return max(found) if found else None
+    found = [int(n) for n in re.findall(r"[?&]page=(\d+)", html, flags=re.I)]
+    return max(found) if found else None
+
+
 def _decode_body(content: bytes, encoding: str) -> str:
     name = encoding.strip().casefold()
     if name in {"cp1251", "windows-1251"}:
@@ -102,37 +119,61 @@ def fetch_listing_html(
     settings: Settings | None = None,
     client: Any | None = None,
     sleeper: SleepFn = time.sleep,
+    warmed: set[str] | None = None,
 ) -> str:
-    """GET listing HTML. One retry after 403. Empty string on failure."""
+    """GET listing HTML. Retry 403 and timeouts. Empty string on failure."""
     import httpx
 
     cfg = settings or get_settings()
     headers = dict(_HTTP_HEADERS)
     headers["User-Agent"] = cfg.user_agent
     own_client = client is None
+    timeout = max(cfg.connect_timeout_sec, 30.0)
     http = client or httpx.Client(
         headers=headers,
         follow_redirects=True,
-        timeout=30.0,
+        timeout=timeout,
     )
     logger = _logger()
+    warmed_set = warmed if warmed is not None else set()
     try:
-        response = http.get(url, headers=headers)
-        if response.status_code == 403:
-            logger.warning("HTTP 403 catalog %s, backoff then retry", url)
-            write_alert(f"fast_scrape 403 url={url}")
-            if cfg.scrape_403_backoff_sec > 0:
-                sleeper(cfg.scrape_403_backoff_sec)
-            response = http.get(url, headers=headers)
+        if seed.warmup and seed.warmup not in warmed_set:
+            try:
+                http.get(seed.warmup, headers=headers)
+            except Exception as exc:
+                logger.info("catalog warmup skipped %s: %s", seed.warmup, exc)
+            warmed_set.add(seed.warmup)
+            if cfg.scrape_warmup_delay_sec > 0:
+                sleeper(cfg.scrape_warmup_delay_sec)
+
+        response = None
+        last_error = ""
+        for attempt in range(3):
+            try:
+                response = http.get(url, headers=headers)
+                if response.status_code == 403 and attempt < 2:
+                    logger.warning("HTTP 403 catalog %s, backoff then retry", url)
+                    write_alert(f"fast_scrape 403 url={url}")
+                    if cfg.scrape_403_backoff_sec > 0:
+                        sleeper(cfg.scrape_403_backoff_sec)
+                    continue
+                break
+            except Exception as exc:
+                last_error = str(exc)
+                logger.warning("catalog fetch attempt=%s %s: %s", attempt + 1, url, exc)
+                if attempt < 2:
+                    sleeper(float(2**attempt))
+                    continue
+                write_alert(f"fast_scrape_failed url={url} error={exc}")
+                return ""
+        if response is None:
+            write_alert(f"fast_scrape_failed url={url} error={last_error}")
+            return ""
         if response.status_code >= 400:
             write_alert(f"fast_scrape HTTP {response.status_code} url={url}")
             logger.warning("catalog skip HTTP %s %s", response.status_code, url)
             return ""
         return _decode_body(response.content, seed.encoding)
-    except Exception as exc:
-        logger.warning("catalog fetch failed %s: %s", url, exc)
-        write_alert(f"fast_scrape_failed url={url} error={exc}")
-        return ""
     finally:
         if own_client:
             http.close()
@@ -162,6 +203,8 @@ def scrape_seed(
     fetcher: FetchFn | None = None,
     sleeper: SleepFn | None = None,
     max_pages: int | None = None,
+    client: Any | None = None,
+    warmed: set[str] | None = None,
 ) -> list[MCUExtractSpec]:
     cfg = settings or get_settings()
     sleep = sleeper or time.sleep
@@ -171,11 +214,14 @@ def scrape_seed(
     seen_parts: set[str] = set()
     previous_keys: set[str] | None = None
     logger = _logger()
+    delay = cfg.fast_scrape_delay_sec
 
     def _fetch(url: str, item: CatalogSeed) -> str:
         if fetcher is not None:
             return fetcher(url, item)
-        return fetch_listing_html(url, item, settings=cfg, sleeper=sleep)
+        return fetch_listing_html(
+            url, item, settings=cfg, sleeper=sleep, client=client, warmed=warmed
+        )
 
     for page_index in range(1, limit + 1):
         url = page_url(seed, page_index)
@@ -183,6 +229,11 @@ def scrape_seed(
         if not html.strip():
             logger.info("empty HTML, stop %s page=%s", seed.competitor, page_index)
             break
+        if page_index == 1:
+            last = detect_last_page(html, seed)
+            if last is not None and last > 0:
+                limit = min(limit, last)
+                logger.info("catalog %s last_page=%s", seed.competitor, last)
         specs = extract_by_selectors(html, site=seed.slug)
         page_keys = {spec.part_number for spec in specs}
         if not page_keys:
@@ -204,8 +255,8 @@ def scrape_seed(
             len(specs),
             len(collected),
         )
-        if page_index < limit and cfg.scrape_delay_sec > 0:
-            sleep(cfg.scrape_delay_sec)
+        if page_index < limit and delay > 0:
+            sleep(delay)
     return collected
 
 
@@ -229,16 +280,27 @@ def run_fast_catalog(
     counts: dict[str, int] = {}
     grouped: dict[str, list[MCUExtractSpec]] = {}
     sources: dict[str, str] = {}
-    for seed in items:
-        specs = scrape_seed(
-            seed,
-            settings=cfg,
-            fetcher=fetcher,
-            sleeper=sleeper,
-            max_pages=max_pages,
-        )
-        grouped.setdefault(seed.competitor, []).extend(specs)
-        sources.setdefault(seed.competitor, seed.url)
+    import httpx
+
+    headers = dict(_HTTP_HEADERS)
+    headers["User-Agent"] = cfg.user_agent
+    timeout = max(cfg.connect_timeout_sec, 30.0)
+    with httpx.Client(
+        headers=headers, follow_redirects=True, timeout=timeout
+    ) as http:
+        warmed: set[str] = set()
+        for seed in items:
+            specs = scrape_seed(
+                seed,
+                settings=cfg,
+                fetcher=fetcher,
+                sleeper=sleeper,
+                max_pages=max_pages,
+                client=http,
+                warmed=warmed,
+            )
+            grouped.setdefault(seed.competitor, []).extend(specs)
+            sources.setdefault(seed.competitor, seed.url)
     for competitor, specs in grouped.items():
         if not specs:
             counts[competitor] = 0

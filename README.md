@@ -179,7 +179,8 @@ grep -q '^SEARCH_WEB_MAX_PARTS=' .env || echo 'SEARCH_WEB_MAX_PARTS=2' >> .env
 grep -q '^SEARCH_WEB_DELAY_SEC=' .env || echo 'SEARCH_WEB_DELAY_SEC=2' >> .env
 grep -q '^SCRAPE_403_BACKOFF_SEC=' .env || echo 'SCRAPE_403_BACKOFF_SEC=12' >> .env
 grep -q '^FAST_SCRAPE=' .env || echo 'FAST_SCRAPE=on' >> .env
-grep -q '^FAST_SCRAPE_MAX_PAGES=' .env || echo 'FAST_SCRAPE_MAX_PAGES=50' >> .env
+grep -q '^FAST_SCRAPE_MAX_PAGES=' .env || echo 'FAST_SCRAPE_MAX_PAGES=600' >> .env
+grep -q '^FAST_SCRAPE_DELAY_SEC=' .env || echo 'FAST_SCRAPE_DELAY_SEC=1' >> .env
 
 # 3) Образ и контейнеры
 docker compose up -d --build

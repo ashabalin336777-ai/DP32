@@ -4,7 +4,14 @@ from pathlib import Path
 
 from src.config import Settings
 from src.db import load_latest_snapshot
-from src.fast_scraper import CatalogSeed, load_catalog_seeds, page_url, run_fast_catalog, scrape_seed
+from src.fast_scraper import (
+    CatalogSeed,
+    detect_last_page,
+    load_catalog_seeds,
+    page_url,
+    run_fast_catalog,
+    scrape_seed,
+)
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -31,6 +38,7 @@ def _settings(tmp_path: Path, **overrides: object) -> Settings:
         "price_dis_threshold": 5.0,
         "fast_scrape_enabled": True,
         "fast_scrape_max_pages": 3,
+        "fast_scrape_delay_sec": 0.0,
         "catalog_seeds_path": tmp_path / "seeds.json",
     }
     values.update(overrides)
@@ -61,6 +69,28 @@ def test_page_url_query_styles() -> None:
     assert "PAGEN_1=2" in page_url(bitrix, 2)
 
 
+def test_detect_last_page_from_pager_links() -> None:
+    html = (
+        '<a href="/catalog/1/11/?page=2">2</a>'
+        '<a href="/catalog/1/11/?page=250">250</a>'
+    )
+    seed = CatalogSeed(
+        "Промэлектроника",
+        "promelec",
+        "https://www.promelec.ru/catalog/1/11/",
+        pagination="page",
+    )
+    assert detect_last_page(html, seed) == 250
+    start = CatalogSeed(
+        "Платан",
+        "platan",
+        "https://www.platan.ru/x",
+        pagination="start",
+        page_size=20,
+    )
+    assert detect_last_page('<a href="?start=2260">last</a>', start) == 114
+
+
 def test_load_catalog_seeds_from_repo() -> None:
     seeds = load_catalog_seeds()
     names = {item.competitor for item in seeds}
@@ -68,9 +98,11 @@ def test_load_catalog_seeds_from_repo() -> None:
     platan = next(item for item in seeds if item.competitor == "Платан")
     assert platan.encoding == "cp1251"
     assert platan.pagination == "start"
+    chipdip = next(item for item in seeds if item.competitor == "ЧипДип")
+    assert "mikrokontrollery-1738" in chipdip.url
     promelec = next(item for item in seeds if item.competitor == "Промэлектроника")
     assert "catalog/1/11" in promelec.url
-    assert promelec.pagination == "pagen"
+    assert promelec.pagination == "page"
 
 
 def test_scrape_seed_stops_on_repeat_and_collects(tmp_path: Path) -> None:

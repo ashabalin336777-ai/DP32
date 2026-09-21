@@ -49,18 +49,22 @@ _MCU_PART_RE = re.compile(
     r"GD32[A-Z0-9\-]+|"
     r"CH32[A-Z0-9\-]+|"
     r"ATSAM[A-Z0-9\-]+|"
+    r"ATXMEGA[A-Z0-9\-]+|"
     r"ATMEGA[A-Z0-9\-]+|"
     r"ATTINY[A-Z0-9\-]+|"
     r"AT89[A-Z0-9\-]+|"
+    r"ADUC[A-Z0-9\-]+|"
     r"PIC[0-9]{2}[A-Z0-9\-/]*|"
     r"MSP430[A-Z0-9\-]*|"
     r"C8051[A-Z0-9\-]*|"
     r"LPC[0-9][A-Z0-9.]*|"
+    r"EFM32[A-Z0-9\-]*|"
     r"N76E[A-Z0-9\-]+|"
     r"STC[0-9][A-Z0-9\-]+"
     r")\b",
     re.I,
 )
+_GENERIC_MPN_RE = re.compile(r"^([A-Za-z][A-Za-z0-9._\-/]{2,80})")
 
 EXTRACT_SYSTEM_PROMPT = """You extract microcontroller catalog specs from HTML.
 Return only fields from the provided JSON schema.
@@ -481,12 +485,36 @@ def _discover_mcu_part(text: str) -> str | None:
     return match.group(1).strip()
 
 
-def _resolve_part_number(text: str, our: dict[str, str]) -> str | None:
-    """Prefer OUR whitelist match, otherwise discover MCU-like MPN on the page."""
+def _generic_listing_part(text: str) -> str | None:
+    first = (text or "").split(",")[0].strip()
+    if not first:
+        return None
+    token = first.split()[0].strip()
+    match = _GENERIC_MPN_RE.match(token)
+    if not match:
+        return None
+    part = match.group(1).rstrip("./-")
+    if len(part) < 4:
+        return None
+    return part
+
+
+def _resolve_part_number(
+    text: str,
+    our: dict[str, str],
+    *,
+    accept_all: bool = False,
+) -> str | None:
+    """Prefer OUR whitelist, then MCU families, then any listing MPN."""
     hit = _find_our_part(text, our)
     if hit:
         return hit
-    return _discover_mcu_part(text)
+    discovered = _discover_mcu_part(text)
+    if discovered:
+        return discovered
+    if accept_all:
+        return _generic_listing_part(text)
+    return None
 
 
 def _detect_site(html: str, config: dict[str, Any]) -> str | None:
@@ -598,7 +626,11 @@ def _extract_listing(
     seen: set[str] = set()
     for item in _select(soup, str(profile.get("item") or "")):
         part_node = _first_select(item, str(profile.get("part") or ""))
-        part = _resolve_part_number(_visible(part_node or item), our)
+        part = _resolve_part_number(
+            _visible(part_node or item),
+            our,
+            accept_all=bool(profile.get("accept_all_parts")),
+        )
         if part is None or part in seen:
             continue
         fields = _empty_fields()
